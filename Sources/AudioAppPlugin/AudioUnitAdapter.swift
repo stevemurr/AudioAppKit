@@ -32,7 +32,15 @@ struct AudioUnitKernel<P: Processor & ~Copyable>: ~Copyable {
     var inputList: UnsafeMutablePointer<AudioBufferList>?
     var inputSamples: UnsafeMutablePointer<Float>?
     var channels: UnsafeMutablePointer<UnsafeMutablePointer<Float>>?
+    /// Where the host's events for the block are copied for the processor to read.
+    var events: UnsafeMutablePointer<Event>?
+    /// Where the packet list sits inside a MIDI event, worked out once away from the audio
+    /// thread because asking for it allocates.
+    var midiListOffset = 0
 }
+
+/// How many host events one block can carry through to the processor.
+let eventCapacity = 512
 
 /// Presents one `Processor` and its parameters to hosts as an Audio Unit (AUv3) effect.
 ///
@@ -237,6 +245,8 @@ public final class AudioUnitAdapter<P: Processor & ~Copyable>: AUAudioUnit {
         for channel in 0..<channelCount { (channels + channel).initialize(to: samples + channel * maxFrames) }
         let list = AudioBufferList.allocate(maximumBuffers: channelCount)
         kernel.pointee.inputSamples = samples
+        kernel.pointee.events = .allocate(capacity: eventCapacity)
+        kernel.pointee.midiListOffset = MemoryLayout<AUMIDIEventList>.offset(of: \.eventList) ?? 0
         kernel.pointee.channels = channels
         kernel.pointee.inputList = list.unsafeMutablePointer
         kernel.pointee.channelCount = channelCount
@@ -258,6 +268,8 @@ public final class AudioUnitAdapter<P: Processor & ~Copyable>: AUAudioUnit {
 
     private func releaseBuffers() {
         kernel.pointee.inputSamples?.deallocate()
+        kernel.pointee.events?.deallocate()
+        kernel.pointee.events = nil
         kernel.pointee.channels?.deallocate()
         if let list = kernel.pointee.inputList { free(list) }
         kernel.pointee.inputSamples = nil
@@ -303,15 +315,59 @@ public final class AudioUnitAdapter<P: Processor & ~Copyable>: AUAudioUnit {
         let status = pullInput(&pullFlags, timestamp, frameCount, 0, inputList)
         guard status == noErr else { return status }
 
-        // Parameter changes the host scheduled for this block take effect from its start.
+        // Parameter changes the host scheduled for this block set the parameter from the
+        // block's start. They and the host's MIDI are also passed on, each at its own frame,
+        // for a processor that wants to act on the exact moment. The host's list is already
+        // in time order.
         var event = events
+        var passed = 0
+        let start = Int64(timestamp.pointee.mSampleTime)
         while let current = event {
             let type = current.pointee.head.eventType
+            let offset = min(max(Int(current.pointee.head.eventSampleTime - start), 0), max(frames - 1, 0))
             if type == .parameter || type == .parameterRamp {
                 let change = current.pointee.parameter
                 let index = Int(change.parameterAddress)
                 if index < kernel.pointee.parameterCount {
                     kernel.pointee.parameters[index]._withUnsafeGuaranteedRef { $0.value = change.value }
+                }
+                if let store = kernel.pointee.events, passed < eventCapacity {
+                    (store + passed).initialize(to: Event(offset: offset, .parameter(address: change.parameterAddress, value: change.value)))
+                    passed += 1
+                }
+            } else if type == .MIDI, current.pointee.MIDI.length >= 1, current.pointee.MIDI.length <= 3 {
+                let midi = current.pointee.MIDI
+                if let store = kernel.pointee.events, passed < eventCapacity {
+                    (store + passed).initialize(to: Event(offset: offset, .midi(midi.data.0, midi.length > 1 ? midi.data.1 : 0,
+                                                                                 midi.length > 2 ? midi.data.2 : 0)))
+                    passed += 1
+                }
+            } else if type == .midiEventList {
+                // Newer systems deliver MIDI as Universal MIDI Packets. Pass on the MIDI 1.0
+                // channel messages (packet type 2: one word holding status and two data
+                // bytes) and step over everything else by its length.
+                let store = kernel.pointee.events
+                do {
+                    let list = UnsafeRawPointer(current).advanced(by: kernel.pointee.midiListOffset).assumingMemoryBound(to: MIDIEventList.self)
+                    var packet = UnsafeRawPointer(list).advanced(by: 8).assumingMemoryBound(to: MIDIEventPacket.self)
+                    var remaining = Int(list.pointee.numPackets)
+                    while remaining > 0 {
+                        let count = Int(packet.pointee.wordCount)
+                        let words = UnsafeRawPointer(packet).advanced(by: 12).assumingMemoryBound(to: UInt32.self)
+                        var index = 0
+                        while index < count {
+                            let word = words[index]
+                            let kind = word >> 28
+                            if kind == 2, let store, passed < eventCapacity {
+                                (store + passed).initialize(to: Event(offset: offset, .midi(UInt8((word >> 16) & 0xFF), UInt8((word >> 8) & 0x7F),
+                                                                                             UInt8(word & 0x7F))))
+                                passed += 1
+                            }
+                            index += kind == 5 ? 4 : (kind == 3 || kind == 4 ? 2 : 1)
+                        }
+                        packet = UnsafeRawPointer(words + count).assumingMemoryBound(to: MIDIEventPacket.self)
+                        remaining -= 1
+                    }
                 }
             }
             event = UnsafePointer(current.pointee.head.next)
@@ -339,7 +395,8 @@ public final class AudioUnitAdapter<P: Processor & ~Copyable>: AUAudioUnit {
 
         if !kernel.pointee.bypassed.pointee.load(ordering: .relaxed) {
             var block = AudioBlock(channels: UnsafePointer(channels), channelCount: channelCount, frameCount: frames)
-            let context = RenderContext(sampleRate: SampleRate(kernel.pointee.sampleRate), position: FramePosition(kernel.pointee.position))
+            let context = RenderContext(sampleRate: SampleRate(kernel.pointee.sampleRate), position: FramePosition(kernel.pointee.position),
+                                        events: EventList(events: UnsafePointer(kernel.pointee.events), count: passed))
             kernel.pointee.processor.pointee.process(&block, context)
         }
         kernel.pointee.position += Int64(frames)

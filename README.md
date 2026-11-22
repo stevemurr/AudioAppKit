@@ -5,9 +5,9 @@ Building blocks for audio apps in Swift on Apple platforms: the role JUCE plays 
 The code that runs on the audio thread must never allocate memory, take a lock or wait. Most audio
 libraries leave that rule to convention. Here it is checked twice: by the compiler, and by a test probe.
 
-**Status: first milestone.** The foundations, the processing contract, a runtime graph and the test tools
-are built and tested. Device and file I/O, metering, controls and plug-in export are not built yet; see
-[Roadmap](#roadmap).
+**Status: every planned module is built and tested on macOS.** Nothing has been compiled for iOS, the
+controls have not been tried by hand, and the plug-in adapter has only run in-process; see
+[Not yet verified](#not-yet-verified).
 
 Requires Swift 6 and macOS 15 or iOS 18.
 
@@ -47,16 +47,29 @@ new routing up at its next block, never sees a half-made change, and never frees
 
 | Module | Types |
 |---|---|
-| `AudioAppCore` | `SampleRate`, `FramePosition`, `Decibels`, `ChannelLayout`, `Format`, `Taper`, `AudioBlock`, `SampleBuffer`, `Transport`, `RenderContext`, `Event`, `EventList`, `EventBuffer` |
+| `AudioAppCore` | `SampleRate`, `FramePosition`, `Decibels`, `ChannelLayout`, `Format`, `Taper`, `AudioBlock`, `SampleBuffer`, `Transport`, `RenderContext`, `Event`, `EventList`, `EventBuffer`, `WaveformOverview`, `WaveformBuilder` |
 | `AudioAppRealtime` | `SPSCQueue`, `AudioRing`, `LatestValue`, `Swapped` and `SwappedReader`, `RealtimeMath`, `RealtimeThread` |
-| `AudioAppProcessing` | `Processor`, `@ProcessorSet`, `Parameter`, `Smoothed`, `Graph`, `GraphRenderer`, `Chain`, `DryWet`, `Bypassable`, `MidSide`, `PerChannel`, `ScratchBuffer`, `LatencyDelay` |
-| `AudioAppDSP` | `Gain`, `Biquad`, `BiquadCoefficients`, `FilterResponse` |
+| `AudioAppProcessing` | `Processor`, `@ProcessorSet`, `Graph`, `GraphRenderer`, `Parameter`, `Smoothed`, `ParameterTree`, `ParameterSnapshot`, `ParameterHistory`, `ParameterAttachment`, `Chain`, `DryWet`, `Bypassable`, `MidSide`, `PerChannel`, `ScratchBuffer`, `LatencyDelay` |
+| `AudioAppDSP` | `Gain`, `Biquad`, `StateVariableFilter`, `OnePole`, `Allpass`, `DelayLine`, `EnvelopeFollower`, `Oscillator`, `NoiseSource`, `FFT`, `Window`, `SpectralFrame`, `FilterBank`, `STFTHost`, `DynamicsCore`, `Dynamics`, `LookaheadLimiter`, `FeedbackDelayNetwork`, `Resampler`, `Oversampled` |
+| `AudioAppMetering` | `PeakMeter`, `RMSMeter`, `TruePeakMeter`, `KWeighting`, `LoudnessMeter`, `SpectrumAnalyzer`, `CorrelationMeter`, `MeterTap`, `MeterReadout` |
+| `AudioAppRenderAhead` | `AheadProducer`, `AheadLane`, `AheadReader`, `AheadSource`, `AheadDiagnostics` |
+| `AudioAppIO` | `AudioDevice`, `DeviceList`, `AudioEngine`, `LoadMonitor`, `AudioFileReader`, `AudioFileWriter`, `StreamingFileSource`, `OfflineRenderer`, `SampleRateConverter` |
+| `AudioAppControls` | `Fader`, `Knob`, `LineSlider`, `LevelMeter`, `GainReductionMeter`, `SpectrumView`, `WaveformView`, `ParameterBinding`, `ControlStyle` |
+| `AudioAppPlugin` | `PluginDescription`, `PluginInstance`, `PluginState`, `AudioUnitAdapter` |
 | `AudioAppTesting` | `RealtimeProbe`, `ProcessorHarness`, `TestSignal`, `Measure` |
 
-`import AudioAppKit` brings in the first four. `AudioAppTesting` is a separate product for test targets.
+`import AudioAppKit` brings in the first seven. `AudioAppControls`, `AudioAppPlugin` and `AudioAppTesting`
+are separate products.
 
-Audio is planar 32-bit float at any sample rate and channel count. Filters keep their state in double
-precision.
+Audio is planar 32-bit float at any sample rate and channel count. Filters and meters keep their state in
+double precision.
+
+### Render-ahead
+
+Some DSP cannot be made real-time-safe: a machine-learning model, a large solver, a disk read. An
+`AheadLane` runs such a producer on a worker thread, a set distance ahead of playback, and the audio
+thread only copies what is ready through an `AheadReader`. Seeking discards stale audio, an underrun plays
+silence and is counted, and the same lane can be driven synchronously for offline rendering and tests.
 
 ## How the real-time rule is enforced
 
@@ -130,17 +143,30 @@ Not built yet: per-node channel layouts.
 | `MidSide` | Runs a processor on what the two channels share and how they differ |
 | `PerChannel` | Runs a separate copy of a processor on each channel |
 
-## Roadmap
+## More that the compiler check rejects
 
-| Module | Will hold |
-|---|---|
-| Processing | A macro to write the node enum's forwarding; events; latency compensation; side-chains; `Bypassable`, `DryWet`, `Oversampled`, `STFTHost`; parameter undo and control attachment |
-| DSP | State-variable filter, delay line, envelope follower, FFT, filter bank, dynamics core, limiter, feedback delay network, resampler |
-| RenderAhead | Running DSP that cannot be real-time-safe (machine-learning models, large solvers) ahead of the callback |
-| IO | Devices, the audio engine, file reading and writing, offline render, waveform overviews |
-| Metering | Peak, true peak, loudness, spectrum, correlation |
-| Controls | Fader, knob, slider, level meter, waveform view |
-| Plugin | Audio Unit (AUv3) export |
+Found while building the DSP and Metering modules. On the audio path, avoid or wrap:
+
+- `==` on enums, `squareRoot()`, `floor`, `rounded()`, `tanh`, `atan`
+- pointer `initialize(repeating:)` and `update(from:)`; use a loop
+- calling a method on a class reference; reach shared state through pointers, as `SwappedReader` does
+- key paths, which allocate when made
+
+A checked function may call a function in another file of the same module only if that one carries the
+attributes too; `@inlinable` alone is not enough in a debug build.
+
+## Not yet verified
+
+- **iOS.** Nothing has been compiled for it.
+- **Controls by hand.** Dragging, the scroll wheel, the keyboard and accessibility have not been
+  exercised; the arithmetic underneath and offscreen drawing are tested.
+- **A real plug-in host.** `AudioUnitAdapter` has only been run in-process. Parameter changes a host
+  schedules set the parameter from the start of the block; the exact frame is in `context.events`.
+- **Engine input.** Recording through `AudioEngine` is written but has never been run. Choosing a
+  non-default device and changing its rate or buffer size are untested.
+- **Loudness against reference recordings.** The loudness tests use synthesised tones, not the EBU files.
+  The true-peak meter uses a shorter filter than the standard's table and reads its test tone within 0.1 dB.
+- **Locks.** The probe sees heap activity only; locks are covered by the compiler check alone.
 
 ## Building and testing
 

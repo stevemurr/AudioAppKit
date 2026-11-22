@@ -11,6 +11,11 @@ public enum RealtimeProbe {
         public var allocations: Int
         public var deallocations: Int
 
+        public init(allocations: Int = 0, deallocations: Int = 0) {
+            self.allocations = allocations
+            self.deallocations = deallocations
+        }
+
         /// True when the code neither allocated nor freed.
         public var isClean: Bool { allocations == 0 && deallocations == 0 }
 
