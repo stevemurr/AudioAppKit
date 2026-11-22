@@ -17,24 +17,10 @@ Requires Swift 6 and macOS 15 or iOS 18.
 import AudioAppKit
 
 // 1. Declare the processors your app uses. The set is closed, so the compiler can check all of it.
-enum Node: Processor, ~Copyable {
+//    The macro writes the forwarding code and a checked `Node.render` for your audio callback.
+@ProcessorSet enum Node: ~Copyable {
     case filter(Biquad)
     case gain(Gain)
-
-    mutating func prepare(_ format: Format, maxFrames: Int) {
-        switch consume self {
-        case .filter(var node): node.prepare(format, maxFrames: maxFrames); self = .filter(node)
-        case .gain(var node): node.prepare(format, maxFrames: maxFrames); self = .gain(node)
-        }
-    }
-
-    @_noAllocation @_noLocks
-    mutating func process(_ io: inout AudioBlock, _ context: borrowing RenderContext) {
-        switch consume self {
-        case .filter(var node): node.process(&io, context); self = .filter(node)
-        case .gain(var node): node.process(&io, context); self = .gain(node)
-        }
-    }
 }
 
 // 2. Build the signal path while the app runs.
@@ -47,11 +33,8 @@ try graph.connect(.node(filter), to: .node(gain))
 try graph.connect(.node(gain), to: .output)
 try graph.commit()
 
-// 3. Render from the audio callback. This function is where the compiler checks the whole path.
-@_noAllocation @_noLocks
-func render(_ renderer: borrowing GraphRenderer<Node>, input: AudioBlock, output: AudioBlock, context: RenderContext) {
-    renderer.render(input: input, output: output, context: context)
-}
+// 3. Render from the audio callback. `Node.render` carries the compiler's real-time checks.
+Node.render(graph.renderer, input: input, output: output, context: context)
 
 // 4. Move a fader from any thread.
 level.value = -6
@@ -64,9 +47,9 @@ new routing up at its next block, never sees a half-made change, and never frees
 
 | Module | Types |
 |---|---|
-| `AudioAppCore` | `SampleRate`, `FramePosition`, `Decibels`, `ChannelLayout`, `Format`, `Taper`, `AudioBlock`, `AudioBuffer`, `Transport`, `RenderContext` |
+| `AudioAppCore` | `SampleRate`, `FramePosition`, `Decibels`, `ChannelLayout`, `Format`, `Taper`, `AudioBlock`, `AudioBuffer`, `Transport`, `RenderContext`, `Event`, `EventList`, `EventBuffer` |
 | `AudioAppRealtime` | `SPSCQueue`, `AudioRing`, `LatestValue`, `Swapped` and `SwappedReader`, `RealtimeMath`, `RealtimeThread` |
-| `AudioAppProcessing` | `Processor`, `Chain`, `Parameter`, `Smoothed`, `Graph`, `GraphRenderer`, `NodeID`, `Endpoint` |
+| `AudioAppProcessing` | `Processor`, `@ProcessorSet`, `Parameter`, `Smoothed`, `Graph`, `GraphRenderer`, `Chain`, `DryWet`, `Bypassable`, `MidSide`, `PerChannel`, `ScratchBuffer`, `LatencyDelay` |
 | `AudioAppDSP` | `Gain`, `Biquad`, `BiquadCoefficients`, `FilterResponse` |
 | `AudioAppTesting` | `RealtimeProbe`, `ProcessorHarness`, `TestSignal`, `Measure` |
 
@@ -79,8 +62,9 @@ precision.
 
 **The compiler.** Swift's `@_noAllocation` and `@_noLocks` attributes make it a build error for a function,
 or anything it calls, to allocate, lock or count references. Every `process` in this library carries them.
-Put them on your own audio callback, as in step 3 above, and the check runs through the graph and into
-every processor in your node enum. The check runs in debug and release builds alike.
+`@ProcessorSet` writes a `render` function that carries them too, so calling it, as in step 3 above, runs
+the check through the graph and into every processor in your node enum. The check runs in debug and
+release builds alike.
 
 **The probe.** `RealtimeProbe.measure { ... }` counts every allocation and free the enclosed code makes on
 its thread. The library's tests run every processor and the graph under it, including the block where a
@@ -110,17 +94,41 @@ These come from what the compiler accepted and rejected while building the libra
 
 ### Debug builds
 
-In a debug build, an ordinary `for` loop over a range performs a runtime type lookup that allocates.
-Functions carrying the attributes are compiled without it, which is why the library's hot paths carry them
-directly. When you repeat a call inside `RealtimeProbe.measure`, use a `while` loop.
+Two things differ in a debug build.
+
+- **Unchecked code allocates.** An ordinary `for` loop over a range, or generic code that has not been
+  specialised, performs runtime type lookups that allocate. Code reached from a function carrying the
+  attributes is compiled without them. So always render through a checked function such as `Node.render`,
+  and when you repeat a call inside `RealtimeProbe.measure`, use a `while` loop.
+- **The check sees one file at a time.** A debug build compiles each file alone, and the check can only
+  see through generic code (the graph, a wrapper, a default implementation) to a processor whose
+  conformance is in the file being compiled. Keep a `@ProcessorSet` enum in the same file as any of your
+  own processors it holds, and put a checked call through `DryWet<YourProcessor>` in the file that
+  declares `YourProcessor`. Release builds compile the module whole and have no such limit.
 
 ## The graph
 
-Each node has one input and one output in the graph's channel layout. A node's input is the sum of
-everything connected to it, each connection with its own gain, so a connection is also a send.
+- **Inputs.** Each node has a main input and an output in the graph's channel layout. An input is the sum
+  of everything connected to it, each connection with its own gain, so a connection is also a send.
+- **Side-chains.** A node may also have a side-chain input (`connect(_:to:input: .sidechain)`), handed to
+  the processor's `process(_:sidechain:_:)`.
+- **Latency.** When paths of different latency meet, the earlier ones are delayed so they arrive together.
+  `graph.latencyFrames` is how late the output is as a whole. The aligning delays start empty after each
+  `commit`, so rewiring a path that needs alignment drops that many frames of its audio once.
+- **Events.** `RenderContext.events` carries MIDI, parameter changes and custom events timed to the frame.
+  They reach every node, and stay on their frame when a long block is rendered in pieces.
 
-Not built yet: side-chain inputs, per-node channel layouts, latency compensation between parallel paths,
-and events (MIDI, sample-accurate parameter changes).
+Not built yet: per-node channel layouts.
+
+## Wrapping a processor
+
+| Wrapper | Does |
+|---|---|
+| `Chain` | Runs two processors in series as one |
+| `DryWet` | Blends processed with untouched, holding the dry signal back by the processor's latency |
+| `Bypassable` | Switches a processor out with a short crossfade and no jump in timing |
+| `MidSide` | Runs a processor on what the two channels share and how they differ |
+| `PerChannel` | Runs a separate copy of a processor on each channel |
 
 ## Roadmap
 
