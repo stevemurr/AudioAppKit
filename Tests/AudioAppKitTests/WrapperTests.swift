@@ -13,7 +13,7 @@ import Testing
         #expect(blend.latencyFrames == 6)
         var samples = [Float](repeating: 0, count: 32)
         samples[4] = 1
-        let buffer = AudioBuffer([samples])
+        let buffer = SampleBuffer([samples])
         var block = buffer.block
         checked(&blend, &block, offline48)
         // Half of the dry impulse and half of the halved one, both at frame 10. Were the dry
@@ -29,7 +29,7 @@ import Testing
             gain.level.value = -6.0206
             var blend = DryWet(gain)
             blend.mix.value = mix
-            let out = ProcessorHarness.run(&blend, input: AudioBuffer([[1, 1, 1, 1]]), sampleRate: 48_000)
+            let out = ProcessorHarness.run(&blend, input: SampleBuffer([[1, 1, 1, 1]]), sampleRate: 48_000)
             #expect(close(out.samples(channel: 0)[3], expected, within: 1e-4))
         }
     }
@@ -39,7 +39,7 @@ import Testing
         let format = Format(sampleRate: 48_000, layout: .mono)
         filter.prepare(format, maxFrames: 256)
         let tone = TestSignal.sine(frequency: 100, sampleRate: 48_000, frames: 4_096, amplitude: 0.2)
-        let buffer = AudioBuffer([tone])
+        let buffer = SampleBuffer([tone])
         for start in stride(from: 0, to: 4_096, by: 256) {
             if start == 2_048 { filter.isBypassed = true }
             var block = buffer.block(from: start, frames: 256)
@@ -63,7 +63,7 @@ import Testing
         gain.level.value = -6.0206
         var wrapped = MidSide(gain)
         wrapped.prepare(stereo48, maxFrames: 8)
-        let buffer = AudioBuffer([[1, 0, 0.5, -1], [1, 1, -0.5, 0.25]])
+        let buffer = SampleBuffer([[1, 0, 0.5, -1], [1, 1, -0.5, 0.25]])
         var block = buffer.block
         checked(&wrapped, &block, offline48)
         #expect(zip(buffer.samples(channel: 0), [0.5, 0, 0.25, -0.5]).allSatisfy { close($0, $1, within: 1e-4) })
@@ -79,7 +79,7 @@ import Testing
             }
         }
         var wrapped = MidSide(MuteSecond())
-        let out = ProcessorHarness.run(&wrapped, input: AudioBuffer([[1, 0.5], [0, 0.5]]), sampleRate: 48_000)
+        let out = ProcessorHarness.run(&wrapped, input: SampleBuffer([[1, 0.5], [0, 0.5]]), sampleRate: 48_000)
         #expect(out.samples(channel: 0) == [0.5, 0.5])
         #expect(out.samples(channel: 1) == [0.5, 0.5])
     }
@@ -89,7 +89,7 @@ import Testing
         var split = PerChannel { channel in Biquad(channel == 0 ? .lowPass : .highPass, frequency: 1_000) }
         let rate: SampleRate = 48_000
         let low = TestSignal.sine(frequency: 100, sampleRate: rate, frames: 4_800, amplitude: 0.5)
-        let out = ProcessorHarness.run(&split, input: AudioBuffer([low, low]), sampleRate: rate)
+        let out = ProcessorHarness.run(&split, input: SampleBuffer([low, low]), sampleRate: rate)
         #expect(Measure.rms(Array(out.samples(channel: 0)[2_400...])) > 0.34)
         #expect(Measure.rms(Array(out.samples(channel: 1)[2_400...])) < 0.01)
 
@@ -101,7 +101,7 @@ import Testing
     @Test func wrappersStayOffTheHeap() {
         // Measured through the checked calls. A wrapper is generic, and in a debug build
         // generic code that is not reached from a checked function does runtime type lookups.
-        let buffer = AudioBuffer([TestSignal.noise(frames: 512, amplitude: 0.5), TestSignal.noise(frames: 512, amplitude: 0.5, seed: 2)])
+        let buffer = SampleBuffer([TestSignal.noise(frames: 512, amplitude: 0.5), TestSignal.noise(frames: 512, amplitude: 0.5, seed: 2)])
         var block = buffer.block
 
         var blend = DryWet(Chain(Late(frames: 6), Gain()))

@@ -79,7 +79,7 @@ private func checkedRead(_ reader: AheadReader, _ output: AudioBlock) -> Int {
 
     /// Fills, then reads, the way an offline render does.
     private func pull(_ lane: AheadLane<Ramp>, _ frames: Int) -> (left: [Float], right: [Float], real: Int) {
-        let buffer = AudioBuffer(channelCount: 2, frameCapacity: frames)
+        let buffer = SampleBuffer(channelCount: 2, frameCapacity: frames)
         lane.fill()
         let real = checkedRead(lane.reader, buffer.block)
         return (buffer.samples(channel: 0), buffer.samples(channel: 1), real)
@@ -111,7 +111,7 @@ private func checkedRead(_ reader: AheadReader, _ output: AudioBlock) -> Int {
         lane.seek(to: 10_000)
         // Nothing has been made for the new position yet. The blocks made for the old one
         // are still in memory and must not be played.
-        let stale = AudioBuffer(channelCount: 2, frameCapacity: 50)
+        let stale = SampleBuffer(channelCount: 2, frameCapacity: 50)
         #expect(checkedRead(lane.reader, stale.block) == 0)
         #expect(stale.samples(channel: 0).allSatisfy { $0 == 0 })
         #expect(lane.position == 10_050)
@@ -188,7 +188,7 @@ private func checkedRead(_ reader: AheadReader, _ output: AudioBlock) -> Int {
     @Test func readingStaysOffTheHeap() {
         let lane = lane(block: 64, ahead: 8_192)
         lane.fill()
-        let buffer = AudioBuffer(channelCount: 2, frameCapacity: 100)
+        let buffer = SampleBuffer(channelCount: 2, frameCapacity: 100)
         let block = buffer.block
         let reader = lane.reader
         var real = 0
@@ -210,7 +210,7 @@ private func checkedRead(_ reader: AheadReader, _ output: AudioBlock) -> Int {
         lane.start()
         #expect(lane.isRunning)
         #expect(lane.waitUntilReady())
-        let buffer = AudioBuffer(channelCount: 2, frameCapacity: 128)
+        let buffer = SampleBuffer(channelCount: 2, frameCapacity: 128)
         var frame = 0
         var exact = true
         var heapUse = 0
@@ -238,7 +238,7 @@ private func checkedRead(_ reader: AheadReader, _ output: AudioBlock) -> Int {
         let torn = Counter(), reads = Counter(), real = Counter()
         let reader = lane.reader
         let audio = Thread {
-            let buffer = AudioBuffer(channelCount: 2, frameCapacity: 200)
+            let buffer = SampleBuffer(channelCount: 2, frameCapacity: 200)
             var turn = 0
             while !stop.load(ordering: .relaxed) {
                 let frames = [200, 1, 77, 128, 129][turn % 5]
@@ -303,7 +303,7 @@ private func checkedRead(_ reader: AheadReader, _ output: AudioBlock) -> Int {
         try graph.commit()
 
         lane.fill()
-        let output = AudioBuffer(channelCount: 2, frameCapacity: 256)
+        let output = SampleBuffer(channelCount: 2, frameCapacity: 256)
         let block = output.block
         let renderer = graph.renderer
         let report = RealtimeProbe.measure { checkedRender(renderer, block, offline48) }

@@ -57,12 +57,12 @@ public enum Measure {
 public enum ProcessorHarness {
     /// Prepares a processor and runs audio through it in blocks of varying length, cycling
     /// through `blockSizes`. Returns the output.
-    public static func run<P: Processor & ~Copyable>(_ processor: inout P, input: AudioBuffer, sampleRate: SampleRate,
-                                                    blockSizes: [Int] = [512]) -> AudioBuffer {
+    public static func run<P: Processor & ~Copyable>(_ processor: inout P, input: SampleBuffer, sampleRate: SampleRate,
+                                                    blockSizes: [Int] = [512]) -> SampleBuffer {
         let sizes = blockSizes.filter { $0 > 0 }.isEmpty ? [512] : blockSizes.filter { $0 > 0 }
         let format = Format(sampleRate: sampleRate, layout: .discrete(input.channelCount))
         processor.prepare(format, maxFrames: sizes.max()!)
-        let output = AudioBuffer(channelCount: input.channelCount, frameCapacity: input.frameCapacity)
+        let output = SampleBuffer(channelCount: input.channelCount, frameCapacity: input.frameCapacity)
         output.block.copy(from: input.block)
         var done = 0, turn = 0
         while done < input.frameCapacity {
@@ -79,7 +79,7 @@ public enum ProcessorHarness {
     /// Prepare the processor first, with `maxFrames` of at least `blockSize`.
     public static func heapActivity<P: Processor & ~Copyable>(_ processor: inout P, channelCount: Int = 2, sampleRate: SampleRate,
                                                              blockSize: Int = 512, blocks: Int = 50) -> RealtimeProbe.Report {
-        let buffer = AudioBuffer((0..<channelCount).map { TestSignal.noise(frames: blockSize, amplitude: 0.5, seed: UInt64($0 + 1)) })
+        let buffer = SampleBuffer((0..<channelCount).map { TestSignal.noise(frames: blockSize, amplitude: 0.5, seed: UInt64($0 + 1)) })
         var block = buffer.block
         let context = RenderContext(sampleRate: sampleRate, isOffline: true)
         return RealtimeProbe.measure {

@@ -163,7 +163,7 @@ public final class EngineCore: @unchecked Sendable {
     private let inputChannels: Int
     /// Captured input on its way from the input callback to the render callback.
     private let inputRing: AudioRing?
-    private let inputScratch: AudioAppCore.AudioBuffer?
+    private let inputScratch: SampleBuffer?
     private let captureChannels: UnsafeMutablePointer<UnsafeMutablePointer<Float>>?
     private var denormalsFlushed = false
 
@@ -178,7 +178,7 @@ public final class EngineCore: @unchecked Sendable {
         channels = .allocate(capacity: format.channelCount)
         if inputChannels > 0 {
             inputRing = AudioRing(channelCount: inputChannels, frameCapacity: 4 * self.maxFrames)
-            inputScratch = AudioAppCore.AudioBuffer(channelCount: inputChannels, frameCapacity: self.maxFrames)
+            inputScratch = SampleBuffer(channelCount: inputChannels, frameCapacity: self.maxFrames)
             captureChannels = .allocate(capacity: inputChannels)
         } else {
             inputRing = nil

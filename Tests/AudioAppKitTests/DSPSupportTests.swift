@@ -2,9 +2,9 @@ import AudioAppKit
 import AudioAppTesting
 import Foundation
 
-func sineBuffer(_ frequency: Double, rate: SampleRate = 48_000, frames: Int, amplitude: Float = 0.5, channels: Int = 1) -> AudioBuffer {
+func sineBuffer(_ frequency: Double, rate: SampleRate = 48_000, frames: Int, amplitude: Float = 0.5, channels: Int = 1) -> SampleBuffer {
     let wave = TestSignal.sine(frequency: frequency, sampleRate: rate, frames: frames, amplitude: amplitude)
-    return AudioBuffer([[Float]](repeating: wave, count: channels))
+    return SampleBuffer([[Float]](repeating: wave, count: channels))
 }
 
 /// What a processor does to a steady tone, in decibels, measured once it has settled. Use

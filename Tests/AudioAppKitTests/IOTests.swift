@@ -18,7 +18,7 @@ private final class Scratch {
 /// A file whose samples say which frame they are, so a seek can be checked exactly.
 private func countingFile(_ url: URL, frames: Int, rate: SampleRate = 48_000) throws {
     let left = (0..<frames).map { Float($0 + 1) / 1_048_576 }
-    try AudioBuffer([left, left.map { -$0 }]).write(to: url, sampleRate: rate)
+    try SampleBuffer([left, left.map { -$0 }]).write(to: url, sampleRate: rate)
 }
 
 private func counting(from frame: Int, count: Int) -> [Float] { (0..<count).map { Float(frame + $0 + 1) / 1_048_576 } }
@@ -50,7 +50,7 @@ private let integerCases: [IntegerCase] = [
         let scratch = Scratch()
         let url = scratch.file("noise.\(type)")
         let left = TestSignal.noise(frames: 10_000, amplitude: 0.9), right = TestSignal.noise(frames: 10_000, amplitude: 0.9, seed: 7)
-        try AudioBuffer([left, right]).write(to: url, sampleRate: 44_100)
+        try SampleBuffer([left, right]).write(to: url, sampleRate: 44_100)
 
         let reader = try AudioFileReader(url: url)
         #expect(reader.format == Format(sampleRate: 44_100, layout: .stereo))
@@ -68,7 +68,7 @@ private let integerCases: [IntegerCase] = [
         let scratch = Scratch()
         let url = scratch.file("tone.\(type)")
         let tone = TestSignal.sine(frequency: 440, sampleRate: 48_000, frames: 4_800, amplitude: 0.8)
-        try AudioBuffer([tone]).write(to: url, sampleRate: 48_000, sampleFormat: format)
+        try SampleBuffer([tone]).write(to: url, sampleRate: 48_000, sampleFormat: format)
         let reader = try AudioFileReader(url: url)
         #expect(reader.format == Format(sampleRate: 48_000, layout: .mono))
         let back = try reader.readAll().samples(channel: 0)
@@ -81,7 +81,7 @@ private let integerCases: [IntegerCase] = [
         let scratch = Scratch()
         let url = scratch.file("four.wav")
         let channels = (0..<4).map { channel in (0..<1_000).map { Float($0) / 2_000 * Float(channel + 1) / 4 } }
-        try AudioBuffer(channels).write(to: url, sampleRate: 96_000)
+        try SampleBuffer(channels).write(to: url, sampleRate: 96_000)
         let reader = try AudioFileReader(url: url)
         #expect(reader.format == Format(sampleRate: 96_000, layout: .discrete(4)))
         let audio = try reader.readAll()
@@ -112,7 +112,7 @@ private let integerCases: [IntegerCase] = [
         try countingFile(url, frames: 100)
         let reader = try AudioFileReader(url: url)
         reader.seek(to: 90)
-        let buffer = AudioBuffer([[Float](repeating: 9, count: 32), [Float](repeating: 9, count: 32), [Float](repeating: 9, count: 32)])
+        let buffer = SampleBuffer([[Float](repeating: 9, count: 32), [Float](repeating: 9, count: 32), [Float](repeating: 9, count: 32)])
         #expect(try reader.read(into: buffer.block) == 10)
         #expect(Array(buffer.samples(channel: 0)[..<10]) == counting(from: 90, count: 10))
         #expect(buffer.samples(channel: 0)[10...].allSatisfy { $0 == 0 })
@@ -128,7 +128,7 @@ private let integerCases: [IntegerCase] = [
         let scratch = Scratch()
         let url = scratch.file("pieces.caf")
         let noise = TestSignal.noise(frames: 9_000, amplitude: 0.5)
-        let source = AudioBuffer([noise, noise])
+        let source = SampleBuffer([noise, noise])
         let writer = try AudioFileWriter(url: url, format: stereo48)
         var done = 0
         for size in [1, 4_096, 4_000, 903] {
@@ -154,7 +154,7 @@ private let integerCases: [IntegerCase] = [
 
     @Test func offlineRenderMatchesRunningTheProcessorByHand() {
         let noise = TestSignal.noise(frames: 5_000, amplitude: 0.5)
-        let input = AudioBuffer([noise, noise])
+        let input = SampleBuffer([noise, noise])
         var filter = Biquad(.lowPass, frequency: 800)
         let rendered = OfflineRenderer.render(&filter, frames: 5_000, format: stereo48, blockSize: 333, input: input)
         var reference = Biquad(.lowPass, frequency: 800)
@@ -183,7 +183,7 @@ private let integerCases: [IntegerCase] = [
         try graph.connect(.input, to: .node(lift))
         try graph.connect(.node(lift), to: .output)
         try graph.commit()
-        let input = AudioBuffer([(0..<500).map(Float.init), (0..<500).map { -Float($0) }])
+        let input = SampleBuffer([(0..<500).map(Float.init), (0..<500).map { -Float($0) }])
         let output = OfflineRenderer.render(graph.renderer, frames: 500, format: stereo48, blockSize: 128, input: input)
         #expect(output.samples(channel: 0) == (0..<500).map { Float($0) + 1 })
         #expect(output.samples(channel: 1) == (0..<500).map { 1 - Float($0) })
@@ -193,7 +193,7 @@ private let integerCases: [IntegerCase] = [
         let scratch = Scratch()
         let url = scratch.file("bounce.wav")
         let tone = TestSignal.sine(frequency: 300, sampleRate: 48_000, frames: 20_000, amplitude: 0.5)
-        let input = AudioBuffer([tone, tone])
+        let input = SampleBuffer([tone, tone])
         var gain = Gain()
         gain.level.value = -6
         gain.prepare(stereo48, maxFrames: 4_096)
@@ -226,7 +226,7 @@ private let integerCases: [IntegerCase] = [
 
         // Not started, so the file is read on this thread: an offline render.
         func pull(_ frames: Int) -> [Float] {
-            let buffer = AudioBuffer(channelCount: 2, frameCapacity: frames)
+            let buffer = SampleBuffer(channelCount: 2, frameCapacity: frames)
             source.lane.fill()
             source.reader.read(into: buffer.block)
             return buffer.samples(channel: 0)
@@ -253,7 +253,7 @@ private let integerCases: [IntegerCase] = [
         let source = try StreamingFileSource(url: url)
         source.start()
         defer { source.stop() }
-        let buffer = AudioBuffer(channelCount: 2, frameCapacity: 512)
+        let buffer = SampleBuffer(channelCount: 2, frameCapacity: 512)
         let block = buffer.block
         let reader = source.reader
         var exact = true, heapUse = 0, frame = 0
@@ -278,7 +278,7 @@ private let integerCases: [IntegerCase] = [
 
     @Test func convertingTheRateKeepsTheToneAndScalesTheLength() throws {
         let tone = TestSignal.sine(frequency: 1_000, sampleRate: 48_000, frames: 48_000, amplitude: 0.5)
-        let converted = try SampleRateConverter.convert(AudioBuffer([tone, tone]), from: 48_000, to: 44_100)
+        let converted = try SampleRateConverter.convert(SampleBuffer([tone, tone]), from: 48_000, to: 44_100)
         #expect(converted.frameCapacity == 44_100)
         #expect(converted.channelCount == 2)
         let middle = Array(converted.samples(channel: 0)[11_025..<33_075])
@@ -287,21 +287,21 @@ private let integerCases: [IntegerCase] = [
         #expect(close(Double(Measure.rms(middle)), 0.5 / 2.0.squareRoot(), within: 0.005))
         #expect(converted.samples(channel: 1) == converted.samples(channel: 0))
 
-        let up = try SampleRateConverter.convert(AudioBuffer([tone]), from: 48_000, to: 96_000, quality: .medium)
+        let up = try SampleRateConverter.convert(SampleBuffer([tone]), from: 48_000, to: 96_000, quality: .medium)
         #expect(up.frameCapacity == 96_000)
         #expect(close(Measure.amplitude(of: 1_000, in: Array(up.samples(channel: 0)[24_000..<72_000]), sampleRate: 96_000), 0.5, within: 0.005))
     }
 
     @Test func convertingToTheSameRateChangesNothing() throws {
         let noise = TestSignal.noise(frames: 1_000)
-        #expect(try SampleRateConverter.convert(AudioBuffer([noise]), from: 48_000, to: 48_000).samples(channel: 0) == noise)
+        #expect(try SampleRateConverter.convert(SampleBuffer([noise]), from: 48_000, to: 48_000).samples(channel: 0) == noise)
     }
 
     @Test func aFileCanBeConvertedToAnotherRate() throws {
         let scratch = Scratch()
         let source = scratch.file("in.wav"), target = scratch.file("out.wav")
         let tone = TestSignal.sine(frequency: 500, sampleRate: 44_100, frames: 22_050, amplitude: 0.25)
-        try AudioBuffer([tone]).write(to: source, sampleRate: 44_100)
+        try SampleBuffer([tone]).write(to: source, sampleRate: 44_100)
         try SampleRateConverter.convertFile(from: source, to: target, sampleRate: 48_000)
         let reader = try AudioFileReader(url: target)
         #expect(reader.format == Format(sampleRate: 48_000, layout: .mono))
@@ -322,7 +322,7 @@ private let integerCases: [IntegerCase] = [
             sizes.withLock { $0.append(output.frameCount) }
             checkedOffset(output, context)
         }
-        let buffer = AudioBuffer([[Float](repeating: 9, count: 600), [Float](repeating: 9, count: 600)])
+        let buffer = SampleBuffer([[Float](repeating: 9, count: 600), [Float](repeating: 9, count: 600)])
         // A pull longer than the limit is served in pieces, on one continuous timeline.
         core.render(into: buffer.block)
         core.render(into: buffer.block(frames: 100))
@@ -335,7 +335,7 @@ private let integerCases: [IntegerCase] = [
 
     @Test func theEngineCoreClearsTheBlockFirst() {
         let core = EngineCore(format: stereo48) { _, _, _ in }
-        let buffer = AudioBuffer([[9, 9, 9], [9, 9, 9]])
+        let buffer = SampleBuffer([[9, 9, 9], [9, 9, 9]])
         core.render(into: buffer.block)
         #expect(buffer.samples(channel: 0) == [0, 0, 0])
         #expect(buffer.samples(channel: 1) == [0, 0, 0])
@@ -353,7 +353,7 @@ private let integerCases: [IntegerCase] = [
         let core = EngineCore(format: stereo48, maxFrames: 512) { _, output, context in
             checkedRender(renderer, output, context)
         }
-        let buffer = AudioBuffer(channelCount: 2, frameCapacity: 512)
+        let buffer = SampleBuffer(channelCount: 2, frameCapacity: 512)
         let block = buffer.block
         core.render(into: block)
         let report = RealtimeProbe.measure {

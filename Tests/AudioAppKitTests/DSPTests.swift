@@ -7,7 +7,7 @@ import Testing
     @Test func gainSetsLevel() {
         var gain = Gain()
         gain.level.value = -6.0206
-        let input = AudioBuffer([[Float](repeating: 1, count: 256), [Float](repeating: -1, count: 256)])
+        let input = SampleBuffer([[Float](repeating: 1, count: 256), [Float](repeating: -1, count: 256)])
         let output = ProcessorHarness.run(&gain, input: input, sampleRate: 48_000)
         #expect(close(output.samples(channel: 0)[255], 0.5, within: 1e-4))
         #expect(close(output.samples(channel: 1)[255], -0.5, within: 1e-4))
@@ -18,7 +18,7 @@ import Testing
         let format = Format(sampleRate: 48_000, layout: .stereo)
         gain.prepare(format, maxFrames: 512)
         gain.level.value = -12
-        let buffer = AudioBuffer([[Float](repeating: 1, count: 2_048), [Float](repeating: 1, count: 2_048)])
+        let buffer = SampleBuffer([[Float](repeating: 1, count: 2_048), [Float](repeating: 1, count: 2_048)])
         for start in stride(from: 0, to: 2_048, by: 512) {
             var block = buffer.block(from: start, frames: 512)
             gain.process(&block, offline48)
@@ -45,7 +45,7 @@ import Testing
         for frequency in [100.0, 500, 1_000, 2_000, 8_000] {
             var filter = Biquad(.peak, frequency: 1_000, gain: 6, q: 1)
             let frames = Int(rate)
-            let input = AudioBuffer([TestSignal.sine(frequency: frequency, sampleRate: sampleRate, frames: frames, amplitude: 0.5)])
+            let input = SampleBuffer([TestSignal.sine(frequency: frequency, sampleRate: sampleRate, frames: frames, amplitude: 0.5)])
             let output = ProcessorHarness.run(&filter, input: input, sampleRate: sampleRate, blockSizes: [64, 1, 333])
             // Measure the second half, after the filter has settled, over whole cycles.
             let settled = Array(output.samples(channel: 0)[(frames / 2)...])
@@ -77,8 +77,8 @@ import Testing
         let noise = TestSignal.noise(frames: 4_800, amplitude: 0.5)
         var a = Biquad(.lowShelf, frequency: 200, gain: 4)
         var b = Biquad(.lowShelf, frequency: 200, gain: 4)
-        let whole = ProcessorHarness.run(&a, input: AudioBuffer([noise, noise]), sampleRate: 48_000, blockSizes: [4_800])
-        let pieces = ProcessorHarness.run(&b, input: AudioBuffer([noise, noise]), sampleRate: 48_000, blockSizes: [1, 7, 512, 64])
+        let whole = ProcessorHarness.run(&a, input: SampleBuffer([noise, noise]), sampleRate: 48_000, blockSizes: [4_800])
+        let pieces = ProcessorHarness.run(&b, input: SampleBuffer([noise, noise]), sampleRate: 48_000, blockSizes: [1, 7, 512, 64])
         #expect(whole.samples(channel: 0) == pieces.samples(channel: 0))
         #expect(whole.samples(channel: 1) == pieces.samples(channel: 0))
     }
@@ -88,7 +88,7 @@ import Testing
         let rate: SampleRate = 48_000
         filter.prepare(Format(sampleRate: rate, layout: .mono), maxFrames: 4_800)
         func pass() -> Double {
-            let buffer = AudioBuffer([TestSignal.sine(frequency: 1_000, sampleRate: rate, frames: 4_800, amplitude: 0.5)])
+            let buffer = SampleBuffer([TestSignal.sine(frequency: 1_000, sampleRate: rate, frames: 4_800, amplitude: 0.5)])
             var block = buffer.block
             filter.process(&block, offline48)
             return 20 * log10(Measure.amplitude(of: 1_000, in: Array(buffer.samples(channel: 0)[2_400...]), sampleRate: rate) / 0.5)
@@ -99,7 +99,7 @@ import Testing
 
         // After a reset, silence in gives exact silence out.
         filter.reset()
-        let quiet = AudioBuffer([TestSignal.silence(frames: 64)])
+        let quiet = SampleBuffer([TestSignal.silence(frames: 64)])
         var block = quiet.block
         filter.process(&block, offline48)
         #expect(quiet.samples(channel: 0).allSatisfy { $0 == 0 })
@@ -125,7 +125,7 @@ import Testing
     @Test func chainRunsBothInOrder() {
         var chain = Chain(Offset(value: 1), Gain())
         chain.second.level.value = -6.0206
-        let output = ProcessorHarness.run(&chain, input: AudioBuffer([[1, 1, 1, 1]]), sampleRate: 48_000)
+        let output = ProcessorHarness.run(&chain, input: SampleBuffer([[1, 1, 1, 1]]), sampleRate: 48_000)
         #expect(close(output.samples(channel: 0)[3], 1, within: 1e-4))
     }
 

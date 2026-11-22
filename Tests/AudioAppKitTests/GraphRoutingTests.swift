@@ -5,8 +5,8 @@ import Testing
 /// Side-chains, latency alignment and events.
 @Suite struct GraphRoutingTests {
     private func render(_ graph: Graph<TestNode>, input: [Float], events: EventList = .empty) -> [Float] {
-        let output = AudioBuffer(channelCount: 2, frameCapacity: input.count)
-        let source = AudioBuffer([input, input])
+        let output = SampleBuffer(channelCount: 2, frameCapacity: input.count)
+        let source = SampleBuffer([input, input])
         var context = offline48
         context.events = events
         withExtendedLifetime(source) {
@@ -98,8 +98,8 @@ import Testing
         try graph.connect(.node(ducker), to: .output)
         try graph.connect(.input, to: .output)
         try graph.commit()
-        let input = AudioBuffer([TestSignal.noise(frames: 64, amplitude: 0.5), TestSignal.noise(frames: 64, amplitude: 0.5, seed: 3)])
-        let output = AudioBuffer(channelCount: 2, frameCapacity: 64)
+        let input = SampleBuffer([TestSignal.noise(frames: 64, amplitude: 0.5), TestSignal.noise(frames: 64, amplitude: 0.5, seed: 3)])
+        let output = SampleBuffer(channelCount: 2, frameCapacity: 64)
         let renderer = graph.renderer
         let report = RealtimeProbe.measure {
             var block = 0

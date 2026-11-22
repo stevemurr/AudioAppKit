@@ -27,9 +27,9 @@ public enum OfflineRenderer {
     /// Renders with a function of your own, such as one that fills a render-ahead lane and
     /// then renders a graph.
     /// - Parameter input: audio fed in block by block, or nil.
-    public static func render(frames: Int, format: Format, blockSize: Int = 512, input: AudioAppCore.AudioBuffer? = nil,
-                              start: FramePosition = 0, _ render: Render) -> AudioAppCore.AudioBuffer {
-        let output = AudioAppCore.AudioBuffer(channelCount: format.channelCount, frameCapacity: max(0, frames))
+    public static func render(frames: Int, format: Format, blockSize: Int = 512, input: SampleBuffer? = nil,
+                              start: FramePosition = 0, _ render: Render) -> SampleBuffer {
+        let output = SampleBuffer(channelCount: format.channelCount, frameCapacity: max(0, frames))
         forEachBlock(frames: frames, sampleRate: format.sampleRate, blockSize: blockSize, start: start) { offset, count, context in
             render(input?.block(from: offset, frames: count), output.block(from: offset, frames: count), context)
         }
@@ -38,8 +38,8 @@ public enum OfflineRenderer {
 
     /// Renders a graph.
     public static func render<Node: Processor & ~Copyable>(_ renderer: GraphRenderer<Node>, frames: Int, format: Format,
-                                                           blockSize: Int = 512, input: AudioAppCore.AudioBuffer? = nil,
-                                                           start: FramePosition = 0) -> AudioAppCore.AudioBuffer {
+                                                           blockSize: Int = 512, input: SampleBuffer? = nil,
+                                                           start: FramePosition = 0) -> SampleBuffer {
         render(frames: frames, format: format, blockSize: blockSize, input: input, start: start) { input, output, context in
             renderer.render(input: input, output: output, context: context)
         }
@@ -48,10 +48,10 @@ public enum OfflineRenderer {
     /// Runs audio through a processor, preparing it first. With no input the processor is
     /// handed silence, which suits a source.
     public static func render<P: Processor & ~Copyable>(_ processor: inout P, frames: Int, format: Format,
-                                                        blockSize: Int = 512, input: AudioAppCore.AudioBuffer? = nil,
-                                                        start: FramePosition = 0) -> AudioAppCore.AudioBuffer {
+                                                        blockSize: Int = 512, input: SampleBuffer? = nil,
+                                                        start: FramePosition = 0) -> SampleBuffer {
         processor.prepare(format, maxFrames: max(1, blockSize))
-        let output = AudioAppCore.AudioBuffer(channelCount: format.channelCount, frameCapacity: max(0, frames))
+        let output = SampleBuffer(channelCount: format.channelCount, frameCapacity: max(0, frames))
         forEachBlock(frames: frames, sampleRate: format.sampleRate, blockSize: blockSize, start: start) { offset, count, context in
             var block = output.block(from: offset, frames: count)
             if let input { block.copy(from: input.block(from: offset, frames: count)) }
@@ -61,9 +61,9 @@ public enum OfflineRenderer {
     }
 
     /// Renders straight to a file, a block at a time, so the length is not limited by memory.
-    public static func render(to writer: AudioFileWriter, frames: Int, blockSize: Int = 4_096, input: AudioAppCore.AudioBuffer? = nil,
+    public static func render(to writer: AudioFileWriter, frames: Int, blockSize: Int = 4_096, input: SampleBuffer? = nil,
                               start: FramePosition = 0, _ render: Render) throws {
-        let scratch = AudioAppCore.AudioBuffer(channelCount: writer.format.channelCount, frameCapacity: max(1, blockSize))
+        let scratch = SampleBuffer(channelCount: writer.format.channelCount, frameCapacity: max(1, blockSize))
         try forEachBlock(frames: frames, sampleRate: writer.format.sampleRate, blockSize: blockSize, start: start) { offset, count, context in
             let block = scratch.block(frames: count)
             render(input?.block(from: offset, frames: count), block, context)
@@ -90,11 +90,11 @@ public enum SampleRateConverter {
 
     /// Returns the buffer's audio at another rate. The result is the input's length scaled
     /// by the ratio of the rates, to the nearest frame.
-    public static func convert(_ buffer: AudioAppCore.AudioBuffer, from source: SampleRate, to target: SampleRate,
-                               quality: Quality = .best) throws -> AudioAppCore.AudioBuffer {
+    public static func convert(_ buffer: SampleBuffer, from source: SampleRate, to target: SampleRate,
+                               quality: Quality = .best) throws -> SampleBuffer {
         let frames = buffer.frameCapacity
         let wanted = Int((Double(frames) * target.hertz / source.hertz).rounded())
-        let result = AudioAppCore.AudioBuffer(channelCount: buffer.channelCount, frameCapacity: wanted)
+        let result = SampleBuffer(channelCount: buffer.channelCount, frameCapacity: wanted)
         guard source != target else {
             result.block.copy(from: buffer.block)
             return result

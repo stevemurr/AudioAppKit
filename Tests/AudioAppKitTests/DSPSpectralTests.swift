@@ -51,11 +51,11 @@ import Testing
     @Test func theTransformStaysOffTheHeap() {
         let fft = FFT(size: 2_048)
         let frame = SpectralFrame(fftSize: 2_048)
-        let input = AudioBuffer([TestSignal.noise(frames: 2_048)])
-        let output = AudioBuffer(channelCount: 1, frameCapacity: 2_048)
+        let input = SampleBuffer([TestSignal.noise(frames: 2_048)])
+        let output = SampleBuffer(channelCount: 1, frameCapacity: 2_048)
         var bank = FilterBank.octave(perOctave: 3)
         bank.prepare(fftSize: 2_048, sampleRate: 48_000)
-        let powers = AudioBuffer(channelCount: 1, frameCapacity: bank.bandCount)
+        let powers = SampleBuffer(channelCount: 1, frameCapacity: bank.bandCount)
         let report = RealtimeProbe.measure {
             var turn = 0
             while turn < 50 {
@@ -147,7 +147,7 @@ import Testing
         #expect(host.fftSize == 512 && host.hop == 512 / overlap)
         let noise = TestSignal.noise(frames: 6_000, amplitude: 0.5, seed: 3)
         let other = TestSignal.noise(frames: 6_000, amplitude: 0.5, seed: 4)
-        let output = ProcessorHarness.run(&host, input: AudioBuffer([noise, other]), sampleRate: 48_000, blockSizes: [1, 37, 512, 700, 64])
+        let output = ProcessorHarness.run(&host, input: SampleBuffer([noise, other]), sampleRate: 48_000, blockSizes: [1, 37, 512, 700, 64])
         let delay = host.latencyFrames
         #expect(delay == 512)
         for (channel, source) in [noise, other].enumerated() {
@@ -159,12 +159,12 @@ import Testing
 
         // The same audio in different block sizes gives the same answer.
         var again = STFTHost(SpectralPassthrough(), fftSize: 512, overlap: overlap)
-        let whole = ProcessorHarness.run(&again, input: AudioBuffer([noise, other]), sampleRate: 48_000, blockSizes: [6_000])
+        let whole = ProcessorHarness.run(&again, input: SampleBuffer([noise, other]), sampleRate: 48_000, blockSizes: [6_000])
         #expect(whole.samples(channel: 1) == output.samples(channel: 1))
 
         // After a reset nothing of the old audio is left.
         again.reset()
-        let quiet = AudioBuffer(channelCount: 2, frameCapacity: 2_048)
+        let quiet = SampleBuffer(channelCount: 2, frameCapacity: 2_048)
         var block = quiet.block
         again.process(&block, offline48)
         #expect(quiet.samples(channel: 0).allSatisfy { $0 == 0 })
@@ -180,7 +180,7 @@ import Testing
     @Test func theSpectralHostStaysOffTheHeap() {
         var host = STFTHost(SpectralLowPass(cutoff: 4_000), fftSize: 1_024)
         host.prepare(stereo48, maxFrames: 480)
-        let buffer = AudioBuffer([TestSignal.noise(frames: 480), TestSignal.noise(frames: 480, seed: 2)])
+        let buffer = SampleBuffer([TestSignal.noise(frames: 480), TestSignal.noise(frames: 480, seed: 2)])
         var block = buffer.block
         let report = RealtimeProbe.measure {
             var turn = 0

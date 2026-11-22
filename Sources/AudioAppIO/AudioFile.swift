@@ -86,14 +86,14 @@ public final class AudioFileReader {
     }
 
     /// Reads frames into a new buffer, from the current position.
-    public func read(frames: Int) throws -> AudioAppCore.AudioBuffer {
-        let buffer = AudioAppCore.AudioBuffer(channelCount: format.channelCount, frameCapacity: max(0, min(frames, frameCount - position)))
+    public func read(frames: Int) throws -> SampleBuffer {
+        let buffer = SampleBuffer(channelCount: format.channelCount, frameCapacity: max(0, min(frames, frameCount - position)))
         try read(into: buffer.block)
         return buffer
     }
 
     /// Reads the whole file into a new buffer.
-    public func readAll() throws -> AudioAppCore.AudioBuffer {
+    public func readAll() throws -> SampleBuffer {
         seek(to: 0)
         return try read(frames: frameCount)
     }
@@ -194,7 +194,7 @@ public final class AudioFileWriter {
     }
 
     /// Appends a whole buffer.
-    public func write(_ buffer: AudioAppCore.AudioBuffer) throws {
+    public func write(_ buffer: SampleBuffer) throws {
         try write(buffer.block)
     }
 
@@ -207,7 +207,7 @@ public final class AudioFileWriter {
     deinit { file?.close() }
 }
 
-extension AudioAppCore.AudioBuffer {
+extension SampleBuffer {
     /// Writes the buffer to a new file.
     public func write(to url: URL, sampleRate: SampleRate, sampleFormat: AudioFileWriter.SampleFormat = .float32) throws {
         let writer = try AudioFileWriter(url: url, format: Format(sampleRate: sampleRate, layout: .discrete(channelCount)),

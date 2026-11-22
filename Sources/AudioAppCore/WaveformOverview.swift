@@ -164,7 +164,7 @@ public struct WaveformBuilder {
     }
 
     /// The overview of a whole buffer.
-    public static func overview(of buffer: AudioBuffer, sampleRate: Double, framesPerBucket: Int = 256, factor: Int = 4) -> WaveformOverview {
+    public static func overview(of buffer: SampleBuffer, sampleRate: Double, framesPerBucket: Int = 256, factor: Int = 4) -> WaveformOverview {
         var builder = WaveformBuilder(channelCount: buffer.channelCount, sampleRate: sampleRate, framesPerBucket: framesPerBucket, factor: factor)
         builder.append(buffer.block)
         return builder.overview()

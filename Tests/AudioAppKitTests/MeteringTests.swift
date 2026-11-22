@@ -27,7 +27,7 @@ private struct PairMeter: Meter {
 @Suite struct MeteringTests {
     /// Feeds a whole signal to a meter in blocks.
     private func measure<M: Meter & ~Copyable>(_ meter: inout M, _ channels: [[Float]], rate: SampleRate = 48_000, block: Int = 512) {
-        let buffer = AudioBuffer(channels)
+        let buffer = SampleBuffer(channels)
         var start = 0
         while start < buffer.frameCapacity {
             let frames = min(block, buffer.frameCapacity - start)
@@ -280,7 +280,7 @@ private struct PairMeter: Meter {
         let readout = tap.readout
         tap.prepare(stereo48, maxFrames: 512)
         let noise = TestSignal.noise(frames: 512, amplitude: 0.6)
-        let buffer = AudioBuffer([noise, noise])
+        let buffer = SampleBuffer([noise, noise])
         var block = buffer.block
         checked(&tap, &block, offline48)
         #expect(buffer.samples(channel: 0) == noise)
@@ -304,7 +304,7 @@ private struct PairMeter: Meter {
             }
         }
         reader.start()
-        let buffer = AudioBuffer(channelCount: 2, frameCapacity: 64)
+        let buffer = SampleBuffer(channelCount: 2, frameCapacity: 64)
         var block = buffer.block
         var turns = 0
         while turns < 200_000 || seen.value < 1_000 {
@@ -318,7 +318,7 @@ private struct PairMeter: Meter {
     }
 
     @Test func metersStayOffTheHeap() {
-        let noise = AudioBuffer([TestSignal.noise(frames: 480, amplitude: 0.5), TestSignal.noise(frames: 480, amplitude: 0.5, seed: 2)])
+        let noise = SampleBuffer([TestSignal.noise(frames: 480, amplitude: 0.5), TestSignal.noise(frames: 480, amplitude: 0.5, seed: 2)])
         var block = noise.block
 
         var peak = MeterTap(PeakMeter())

@@ -20,8 +20,8 @@ import Testing
 
         var impulse = [Float](repeating: 0, count: 16)
         impulse[1] = 1
-        let input = AudioBuffer([impulse, impulse])
-        let output = AudioBuffer(channelCount: 2, frameCapacity: 16)
+        let input = SampleBuffer([impulse, impulse])
+        let output = SampleBuffer(channelCount: 2, frameCapacity: 16)
         let renderer = graph.renderer
         let report = RealtimeProbe.measure {
             MacroNode.render(renderer, input: input.block, output: output.block, context: offline48)
@@ -36,11 +36,11 @@ import Testing
     @Test func resetReachesTheHeldProcessor() {
         var node = MacroNode.filter(Biquad(.lowPass, frequency: 200))
         node.prepare(Format(sampleRate: 48_000, layout: .mono), maxFrames: 64)
-        let loud = AudioBuffer([[Float](repeating: 1, count: 64)])
+        let loud = SampleBuffer([[Float](repeating: 1, count: 64)])
         var block = loud.block
         node.process(&block, offline48)
         node.reset()
-        let quiet = AudioBuffer([[Float](repeating: 0, count: 64)])
+        let quiet = SampleBuffer([[Float](repeating: 0, count: 64)])
         block = quiet.block
         node.process(&block, offline48)
         #expect(quiet.samples(channel: 0).allSatisfy { $0 == 0 })

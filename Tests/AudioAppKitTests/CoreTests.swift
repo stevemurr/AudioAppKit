@@ -34,8 +34,8 @@ import Testing
     }
 
     @Test func blockSlicesAndSums() {
-        let a = AudioBuffer([[1, 2, 3, 4], [10, 20, 30, 40]])
-        let b = AudioBuffer([[1, 1, 1, 1], [2, 2, 2, 2]])
+        let a = SampleBuffer([[1, 2, 3, 4], [10, 20, 30, 40]])
+        let b = SampleBuffer([[1, 1, 1, 1], [2, 2, 2, 2]])
         a.block.add(b.block, gain: 0.5)
         #expect(a.samples(channel: 0) == [1.5, 2.5, 3.5, 4.5])
         #expect(a.samples(channel: 1) == [11, 21, 31, 41])
@@ -47,8 +47,8 @@ import Testing
     }
 
     @Test func monoSourceReachesEveryChannelAndMissingChannelsClear() {
-        let mono = AudioBuffer([[1, 2]])
-        let wide = AudioBuffer([[0, 0], [5, 5]])
+        let mono = SampleBuffer([[1, 2]])
+        let wide = SampleBuffer([[0, 0], [5, 5]])
         wide.block.add(mono.block)
         #expect(wide.samples(channel: 0) == [1, 2])
         #expect(wide.samples(channel: 1) == [6, 7])

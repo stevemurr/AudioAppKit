@@ -6,11 +6,11 @@ import Testing
 
 @Suite struct GraphTests {
     /// Renders one block through the compiler-checked callback.
-    private func render(_ graph: Graph<TestNode>, frames: Int = 64, input: [Float]? = nil) -> AudioBuffer {
-        let output = AudioBuffer(channelCount: 2, frameCapacity: frames)
+    private func render(_ graph: Graph<TestNode>, frames: Int = 64, input: [Float]? = nil) -> SampleBuffer {
+        let output = SampleBuffer(channelCount: 2, frameCapacity: frames)
         if let input {
             // A block does not keep its buffer alive, so hold the buffer for the whole call.
-            let source = AudioBuffer([input, input])
+            let source = SampleBuffer([input, input])
             withExtendedLifetime(source) {
                 checkedRender(graph.renderer, input: source.block, output.block, offline48)
             }
@@ -22,7 +22,7 @@ import Testing
 
     @Test func anEmptyGraphIsSilent() {
         let graph = Graph<TestNode>(format: stereo48, maxFrames: 64)
-        let output = AudioBuffer([[9, 9], [9, 9]])
+        let output = SampleBuffer([[9, 9], [9, 9]])
         checkedRender(graph.renderer, output.block, offline48)
         #expect(output.samples(channel: 0) == [0, 0])
     }
@@ -117,7 +117,7 @@ import Testing
         let output = render(graph, frames: 1_000, input: noise)
 
         var reference = Biquad(.lowPass, frequency: 500)
-        let expected = ProcessorHarness.run(&reference, input: AudioBuffer([noise, noise]), sampleRate: 48_000, blockSizes: [1_000])
+        let expected = ProcessorHarness.run(&reference, input: SampleBuffer([noise, noise]), sampleRate: 48_000, blockSizes: [1_000])
         #expect(output.samples(channel: 0) == expected.samples(channel: 0))
     }
 
@@ -134,7 +134,7 @@ import Testing
         // The audio thread has not rendered since, so it may still be using the node.
         #expect(destroyed.value == 0)
 
-        let output = AudioBuffer(channelCount: 2, frameCapacity: 64)
+        let output = SampleBuffer(channelCount: 2, frameCapacity: 64)
         let report = RealtimeProbe.measure { checkedRender(graph.renderer, output.block, offline48) }
         // Picking up the new routing frees nothing on the audio thread.
         #expect(report.isClean, "\(report)")
@@ -167,8 +167,8 @@ import Testing
         try graph.connect(.node(gain), to: .output)
         try graph.commit()
 
-        let input = AudioBuffer([TestSignal.noise(frames: 512, amplitude: 0.5), TestSignal.noise(frames: 512, amplitude: 0.5, seed: 2)])
-        let output = AudioBuffer(channelCount: 2, frameCapacity: 512)
+        let input = SampleBuffer([TestSignal.noise(frames: 512, amplitude: 0.5), TestSignal.noise(frames: 512, amplitude: 0.5, seed: 2)])
+        let output = SampleBuffer(channelCount: 2, frameCapacity: 512)
         let renderer = graph.renderer
         let report = RealtimeProbe.measure {
             var block = 0
@@ -194,7 +194,7 @@ import Testing
         let stop = Atomic<Bool>(false)
         let blocks = Counter(), wrong = Counter(), heapUse = Counter()
         let audio = Thread {
-            let output = AudioBuffer(channelCount: 2, frameCapacity: 64)
+            let output = SampleBuffer(channelCount: 2, frameCapacity: 64)
             while !stop.load(ordering: .relaxed) {
                 let report = RealtimeProbe.measure { checkedRender(renderer, output.block, offline48) }
                 if !report.isClean { heapUse.bump() }

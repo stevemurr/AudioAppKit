@@ -26,7 +26,7 @@ import Testing
         var filter = StateVariableFilter(.lowPass, frequency: 200, q: 4)
         filter.prepare(Format(sampleRate: 48_000, layout: .mono), maxFrames: 256)
         let input = TestSignal.sine(frequency: 100, sampleRate: 48_000, frames: 48_000, amplitude: 0.5)
-        let buffer = AudioBuffer([input])
+        let buffer = SampleBuffer([input])
         var start = 0
         var turn = 0
         while start < 48_000 {
@@ -143,7 +143,7 @@ import Testing
         let rate: SampleRate = 48_000
         func harmonic(_ waveform: Oscillator.Waveform, _ frequency: Double, of fundamental: Float = 1_000) -> Double {
             var oscillator = Oscillator(waveform, frequency: fundamental, level: -6.0206)
-            let output = ProcessorHarness.run(&oscillator, input: AudioBuffer(channelCount: 2, frameCapacity: 48_000), sampleRate: rate)
+            let output = ProcessorHarness.run(&oscillator, input: SampleBuffer(channelCount: 2, frameCapacity: 48_000), sampleRate: rate)
             #expect(output.samples(channel: 0) == output.samples(channel: 1))
             return Measure.amplitude(of: frequency, in: output.samples(channel: 0), sampleRate: rate) / 0.5
         }
@@ -162,7 +162,7 @@ import Testing
         // 18 kHz. Drawn plainly it would arrive at full strength.
         let rate: SampleRate = 48_000
         var oscillator = Oscillator(.saw, frequency: 5_000, level: 0)
-        let output = ProcessorHarness.run(&oscillator, input: AudioBuffer(channelCount: 1, frameCapacity: 48_000), sampleRate: rate)
+        let output = ProcessorHarness.run(&oscillator, input: SampleBuffer(channelCount: 1, frameCapacity: 48_000), sampleRate: rate)
         let folded = Measure.amplitude(of: 18_000, in: output.samples(channel: 0), sampleRate: rate)
         let plain = 2 / (Double.pi * 6)
         #expect(folded < plain / 3)
@@ -174,7 +174,7 @@ import Testing
         func octaves(_ color: NoiseSource.Color) -> [Double] {
             var noise = NoiseSource(color, level: 0)
             let frames = 1 << 19
-            let output = ProcessorHarness.run(&noise, input: AudioBuffer(channelCount: 1, frameCapacity: frames), sampleRate: rate)
+            let output = ProcessorHarness.run(&noise, input: SampleBuffer(channelCount: 1, frameCapacity: frames), sampleRate: rate)
             let samples = output.samples(channel: 0)
             let fft = FFT(size: 8_192)
             let frame = SpectralFrame(fftSize: 8_192)
@@ -205,7 +205,7 @@ import Testing
 
     @Test func whiteNoiseFillsItsRangeEvenly() {
         var noise = NoiseSource(.white, level: 0)
-        let output = ProcessorHarness.run(&noise, input: AudioBuffer(channelCount: 1, frameCapacity: 100_000), sampleRate: 48_000)
+        let output = ProcessorHarness.run(&noise, input: SampleBuffer(channelCount: 1, frameCapacity: 100_000), sampleRate: 48_000)
         let samples = output.samples(channel: 0)
         #expect(Measure.peak(samples) <= 1)
         #expect(Measure.peak(samples) > 0.99)

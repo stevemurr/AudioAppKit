@@ -165,7 +165,7 @@ import Testing
     @Test func everyControlDraws() {
         let level = Parameter(id: "level", name: "Level", default: 0, in: -60...12, unit: .decibels)
         let binding = ParameterBinding(level)
-        let overview = WaveformBuilder.overview(of: AudioBuffer([TestSignal.sine(frequency: 5, sampleRate: 1_000, frames: 4_000)]), sampleRate: 1_000)
+        let overview = WaveformBuilder.overview(of: SampleBuffer([TestSignal.sine(frequency: 5, sampleRate: 1_000, frames: 4_000)]), sampleRate: 1_000)
         func drawn(_ view: some View, _ width: CGFloat, _ height: CGFloat) -> Bool {
             let renderer = ImageRenderer(content: view.frame(width: width, height: height).background(Color.black))
             guard let image = renderer.cgImage else { return false }
@@ -188,7 +188,7 @@ import Testing
     @Test func theWaveformPictureFollowsTheAudio() throws {
         var samples = [Float](repeating: 0, count: 2_000)
         for index in 1_000..<2_000 { samples[index] = index % 2 == 0 ? 1 : -1 }
-        let overview = WaveformBuilder.overview(of: AudioBuffer([samples]), sampleRate: 1_000, framesPerBucket: 10, factor: 2)
+        let overview = WaveformBuilder.overview(of: SampleBuffer([samples]), sampleRate: 1_000, framesPerBucket: 10, factor: 2)
         let renderer = ImageRenderer(content: WaveformView(overview).frame(width: 200, height: 40).background(Color.black))
         renderer.scale = 1
         let image = try #require(renderer.cgImage)

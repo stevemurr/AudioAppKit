@@ -47,7 +47,7 @@ new routing up at its next block, never sees a half-made change, and never frees
 
 | Module | Types |
 |---|---|
-| `AudioAppCore` | `SampleRate`, `FramePosition`, `Decibels`, `ChannelLayout`, `Format`, `Taper`, `AudioBlock`, `AudioBuffer`, `Transport`, `RenderContext`, `Event`, `EventList`, `EventBuffer` |
+| `AudioAppCore` | `SampleRate`, `FramePosition`, `Decibels`, `ChannelLayout`, `Format`, `Taper`, `AudioBlock`, `SampleBuffer`, `Transport`, `RenderContext`, `Event`, `EventList`, `EventBuffer` |
 | `AudioAppRealtime` | `SPSCQueue`, `AudioRing`, `LatestValue`, `Swapped` and `SwappedReader`, `RealtimeMath`, `RealtimeThread` |
 | `AudioAppProcessing` | `Processor`, `@ProcessorSet`, `Parameter`, `Smoothed`, `Graph`, `GraphRenderer`, `Chain`, `DryWet`, `Bypassable`, `MidSide`, `PerChannel`, `ScratchBuffer`, `LatencyDelay` |
 | `AudioAppDSP` | `Gain`, `Biquad`, `BiquadCoefficients`, `FilterResponse` |

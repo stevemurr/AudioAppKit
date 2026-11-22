@@ -75,7 +75,7 @@ import Testing
         compressor.threshold.value = -30
         let loud = TestSignal.sine(frequency: 500, sampleRate: 48_000, frames: 24_000, amplitude: 0.9)
         let soft = TestSignal.sine(frequency: 700, sampleRate: 48_000, frames: 24_000, amplitude: 0.01)
-        let output = ProcessorHarness.run(&compressor, input: AudioBuffer([loud, soft]), sampleRate: 48_000)
+        let output = ProcessorHarness.run(&compressor, input: SampleBuffer([loud, soft]), sampleRate: 48_000)
         let a = Measure.amplitude(of: 500, in: Array(output.samples(channel: 0)[12_000...]), sampleRate: 48_000) / 0.9
         let b = Measure.amplitude(of: 700, in: Array(output.samples(channel: 1)[12_000...]), sampleRate: 48_000) / 0.01
         #expect(a < 0.5)
@@ -95,7 +95,7 @@ import Testing
             left[start + 2_500] = 4
             right[start + 2_501] = -3.5
         }
-        let output = ProcessorHarness.run(&limiter, input: AudioBuffer([left, right]), sampleRate: 48_000, blockSizes: [64, 1, 500])
+        let output = ProcessorHarness.run(&limiter, input: SampleBuffer([left, right]), sampleRate: 48_000, blockSizes: [64, 1, 500])
         let ceiling = Decibels(-1).gain
         #expect(Measure.peak(output.samples(channel: 0)) <= ceiling)
         #expect(Measure.peak(output.samples(channel: 1)) <= ceiling)
@@ -110,7 +110,7 @@ import Testing
     @Test func theLimiterLeavesQuietAudioExactlyAsItWasOnlyLater() {
         var limiter = LookaheadLimiter(ceiling: -1)
         let noise = TestSignal.noise(frames: 9_600, amplitude: 0.5, seed: 7)
-        let output = ProcessorHarness.run(&limiter, input: AudioBuffer([noise]), sampleRate: 48_000, blockSizes: [97])
+        let output = ProcessorHarness.run(&limiter, input: SampleBuffer([noise]), sampleRate: 48_000, blockSizes: [97])
         let delay = limiter.latencyFrames
         let result = output.samples(channel: 0)
         #expect(result[..<delay].allSatisfy { $0 == 0 })
@@ -123,7 +123,7 @@ import Testing
         // A steady tone at the ceiling's level, then double it.
         var wave = TestSignal.sine(frequency: 100, sampleRate: 48_000, frames: 48_000, amplitude: 0.5)
         for index in 24_000..<48_000 { wave[index] *= 2 }
-        let output = ProcessorHarness.run(&limiter, input: AudioBuffer([wave]), sampleRate: 48_000)
+        let output = ProcessorHarness.run(&limiter, input: SampleBuffer([wave]), sampleRate: 48_000)
         let result = output.samples(channel: 0)
         #expect(Measure.peak(result) <= Decibels(-6).gain)
         #expect(limiter.reductionDB < -5)
@@ -172,24 +172,24 @@ import Testing
         reverb.damping.value = 0
         let frames = Int(48_000 * seconds * 1.5)
         let impulse = TestSignal.impulse(frames: frames)
-        let output = ProcessorHarness.run(&reverb, input: AudioBuffer([impulse, impulse]), sampleRate: 48_000)
+        let output = ProcessorHarness.run(&reverb, input: SampleBuffer([impulse, impulse]), sampleRate: 48_000)
         #expect(Measure.isFinite(output.samples(channel: 0)))
         let measured = decayTime(output.samples(channel: 0), rate: 48_000)
         #expect(close(measured, seconds, within: 0.1 * seconds), "measured \(measured)")
     }
 
     @Test func dampingShortensTheHighsAndChannelsHearDifferentTails() {
-        func tail(damping: Float) -> AudioBuffer {
+        func tail(damping: Float) -> SampleBuffer {
             var reverb = FeedbackDelayNetwork(lines: 8)
             reverb.decay.value = 2
             reverb.damping.value = damping
             let impulse = TestSignal.impulse(frames: 72_000)
-            return ProcessorHarness.run(&reverb, input: AudioBuffer([impulse, impulse]), sampleRate: 48_000)
+            return ProcessorHarness.run(&reverb, input: SampleBuffer([impulse, impulse]), sampleRate: 48_000)
         }
-        func highShare(_ buffer: AudioBuffer) -> Float {
+        func highShare(_ buffer: SampleBuffer) -> Float {
             let late = Array(buffer.samples(channel: 0)[36_000..<60_000])
             var filter = Biquad(.highPass, frequency: 6_000)
-            let highs = ProcessorHarness.run(&filter, input: AudioBuffer([late]), sampleRate: 48_000)
+            let highs = ProcessorHarness.run(&filter, input: SampleBuffer([late]), sampleRate: 48_000)
             return Measure.rms(highs.samples(channel: 0)) / Measure.rms(late)
         }
         let bright = tail(damping: 0), dark = tail(damping: 0.8)
@@ -205,12 +205,12 @@ import Testing
         var reverb = FeedbackDelayNetwork()
         reverb.mix.value = 0
         let noise = TestSignal.noise(frames: 4_800, amplitude: 0.5)
-        let output = ProcessorHarness.run(&reverb, input: AudioBuffer([noise, noise]), sampleRate: 48_000)
+        let output = ProcessorHarness.run(&reverb, input: SampleBuffer([noise, noise]), sampleRate: 48_000)
         #expect(output.samples(channel: 0) == noise)
 
         reverb.mix.value = 1
         reverb.reset()
-        let quiet = AudioBuffer(channelCount: 2, frameCapacity: 4_800)
+        let quiet = SampleBuffer(channelCount: 2, frameCapacity: 4_800)
         var block = quiet.block
         reverb.process(&block, offline48)
         #expect(quiet.samples(channel: 0).allSatisfy { $0 == 0 })

@@ -7,7 +7,7 @@ import Testing
     @Test func bucketsHoldTheExtremesAndAverageOfTheirFrames() {
         // 8 frames per bucket: a bucket of +0.5, a bucket ramping, and a short last bucket.
         let samples: [Float] = [Float](repeating: 0.5, count: 8) + [-1, -0.5, 0, 0.25, 0.5, 0.75, 1, 0] + [0.2, -0.2]
-        let overview = WaveformBuilder.overview(of: AudioBuffer([samples]), sampleRate: 48_000, framesPerBucket: 8, factor: 2)
+        let overview = WaveformBuilder.overview(of: SampleBuffer([samples]), sampleRate: 48_000, framesPerBucket: 8, factor: 2)
         #expect(overview.frameCount == 18)
         let finest = overview.levels[0].channels[0]
         #expect(finest.count == 3)
@@ -25,7 +25,7 @@ import Testing
 
     @Test func appendingInPiecesMatchesBuildingAtOnce() {
         let noise = TestSignal.noise(frames: 10_000, amplitude: 0.8)
-        let buffer = AudioBuffer([noise, noise.reversed()])
+        let buffer = SampleBuffer([noise, noise.reversed()])
         let whole = WaveformBuilder.overview(of: buffer, sampleRate: 44_100)
         var builder = WaveformBuilder(channelCount: 2, sampleRate: 44_100)
         var done = 0
@@ -41,7 +41,7 @@ import Testing
     }
 
     @Test func aQueryPicksTheCoarsestLevelThatStillResolvesAPixel() {
-        let overview = WaveformBuilder.overview(of: AudioBuffer([TestSignal.noise(frames: 100_000)]), sampleRate: 48_000)
+        let overview = WaveformBuilder.overview(of: SampleBuffer([TestSignal.noise(frames: 100_000)]), sampleRate: 48_000)
         #expect(overview.levels.map(\.framesPerBucket).prefix(4) == [256, 1_024, 4_096, 16_384])
         #expect(overview.levelIndex(framesPerPixel: 10) == 0)
         #expect(overview.levelIndex(framesPerPixel: 256) == 0)
@@ -53,7 +53,7 @@ import Testing
         // A burst in the second quarter of the recording.
         var samples = [Float](repeating: 0, count: 40_000)
         for index in 10_000..<20_000 { samples[index] = index % 2 == 0 ? 0.9 : -0.9 }
-        let overview = WaveformBuilder.overview(of: AudioBuffer([samples]), sampleRate: 48_000, framesPerBucket: 100, factor: 4)
+        let overview = WaveformBuilder.overview(of: SampleBuffer([samples]), sampleRate: 48_000, framesPerBucket: 100, factor: 4)
         let drawn = overview.buckets(channel: 0, frames: 0..<40_000, width: 40)
         #expect(drawn.count == 40)
         #expect(drawn[5] == .silent)
@@ -71,7 +71,7 @@ import Testing
     }
 
     @Test func overviewsCacheAsJSON() throws {
-        let overview = WaveformBuilder.overview(of: AudioBuffer([TestSignal.noise(frames: 3_000), TestSignal.silence(frames: 3_000)]), sampleRate: 96_000)
+        let overview = WaveformBuilder.overview(of: SampleBuffer([TestSignal.noise(frames: 3_000), TestSignal.silence(frames: 3_000)]), sampleRate: 96_000)
         let decoded = try JSONDecoder().decode(WaveformOverview.self, from: JSONEncoder().encode(overview))
         #expect(decoded == overview)
         #expect(decoded.sampleRate == 96_000 && decoded.channelCount == 2)

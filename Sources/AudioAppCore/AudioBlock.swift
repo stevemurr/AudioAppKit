@@ -90,7 +90,7 @@
 
 /// Planar 32-bit float audio that owns its memory. Make these away from the audio thread and
 /// hand out `AudioBlock` views of them.
-public final class AudioBuffer {
+public final class SampleBuffer {
     public let channelCount: Int
     public let frameCapacity: Int
     @usableFromInline let channels: UnsafeMutablePointer<UnsafeMutablePointer<Float>>

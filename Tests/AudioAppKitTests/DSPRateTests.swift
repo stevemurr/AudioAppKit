@@ -131,7 +131,7 @@ private struct Spy: Processor, ~Copyable {
             #expect(close(measuredGainDB(&wrapped, at: frequency, blockSizes: [64, 1, 301]), 0, within: 0.05), "\(frequency) Hz")
         }
         let impulse = TestSignal.impulse(frames: 512)
-        let output = ProcessorHarness.run(&wrapped, input: AudioBuffer([impulse]), sampleRate: 48_000, blockSizes: [100])
+        let output = ProcessorHarness.run(&wrapped, input: SampleBuffer([impulse]), sampleRate: 48_000, blockSizes: [100])
         let result = output.samples(channel: 0)
         #expect(result.firstIndex(of: result.max()!) == wrapped.latencyFrames)
         #expect(wrapped.latencyFrames == (factor == 2 ? 31 : 39))
@@ -141,7 +141,7 @@ private struct Spy: Processor, ~Copyable {
     @Test func theInnerProcessorRunsAtTheHigherRate() {
         let seen = Seen()
         var wrapped = Oversampled(Spy(seen: seen), factor: 4)
-        let output = ProcessorHarness.run(&wrapped, input: AudioBuffer(channelCount: 2, frameCapacity: 256), sampleRate: 48_000,
+        let output = ProcessorHarness.run(&wrapped, input: SampleBuffer(channelCount: 2, frameCapacity: 256), sampleRate: 48_000,
                                           blockSizes: [128])
         #expect(seen.rate == 192_000)
         #expect(seen.maxFrames == 512)
@@ -153,7 +153,7 @@ private struct Spy: Processor, ~Copyable {
         // Clipping a 5 kHz tone makes a seventh harmonic at 35 kHz, which at 48 kHz folds
         // back to 13 kHz: a tone that was never played.
         let rate: SampleRate = 48_000
-        func folded(_ run: (AudioBuffer) -> AudioBuffer) -> Double {
+        func folded(_ run: (SampleBuffer) -> SampleBuffer) -> Double {
             let output = run(sineBuffer(5_000, frames: 48_000, amplitude: 1))
             return Measure.amplitude(of: 13_000, in: Array(output.samples(channel: 0)[24_000...]), sampleRate: rate)
         }
@@ -175,7 +175,7 @@ private struct Spy: Processor, ~Copyable {
         var wrapped = Oversampled(Clip(limit: 0.3), factor: 4)
         wrapped.prepare(stereo48, maxFrames: 256)
         // Longer than the limit it was prepared for, so it must work in pieces.
-        let buffer = AudioBuffer([TestSignal.noise(frames: 600), TestSignal.noise(frames: 600, seed: 2)])
+        let buffer = SampleBuffer([TestSignal.noise(frames: 600), TestSignal.noise(frames: 600, seed: 2)])
         var block = buffer.block
         let report = RealtimeProbe.measure {
             var turn = 0
@@ -188,7 +188,7 @@ private struct Spy: Processor, ~Copyable {
         #expect(Measure.isFinite(buffer.samples(channel: 0)))
 
         wrapped.reset()
-        let quiet = AudioBuffer(channelCount: 2, frameCapacity: 256)
+        let quiet = SampleBuffer(channelCount: 2, frameCapacity: 256)
         var silent = quiet.block
         wrapped.process(&silent, offline48)
         #expect(quiet.samples(channel: 0).allSatisfy { $0 == 0 })
