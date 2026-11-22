@@ -153,6 +153,15 @@ func checkedRender(_ renderer: borrowing GraphRenderer<TestNode>, input: AudioBl
     renderer.render(input: input, output: output, context: context)
 }
 
+/// A node set whose conformance the macro writes. It sits in this file because, in a debug
+/// build, the compiler checks one file at a time and has to see the processors it holds.
+@ProcessorSet enum MacroNode: ~Copyable {
+    case gain(Gain)
+    case filter(Biquad)
+    case late(Late)
+    case ducker(Ducker)
+}
+
 // Checked calls through the library's generic wrappers. In a debug build each file is compiled
 // alone, and the compiler can only see through a wrapper to a processor whose conformance is
 // in the file being compiled. `Late` is declared above, so these live here.

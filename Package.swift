@@ -1,4 +1,5 @@
 // swift-tools-version: 6.0
+import CompilerPluginSupport
 import PackageDescription
 
 let package = Package(
@@ -10,11 +11,20 @@ let package = Package(
         .library(name: "AudioAppPlugin", targets: ["AudioAppPlugin"]),
         .library(name: "AudioAppTesting", targets: ["AudioAppTesting"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.0"..<"700.0.0")
+    ],
     targets: [
+        .macro(name: "AudioAppMacros", dependencies: [
+            .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+            .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
+            .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+            .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
+        ]),
         .target(name: "CAudioAppSupport"),
         .target(name: "AudioAppCore"),
         .target(name: "AudioAppRealtime", dependencies: ["CAudioAppSupport"]),
-        .target(name: "AudioAppProcessing", dependencies: ["AudioAppCore", "AudioAppRealtime"]),
+        .target(name: "AudioAppProcessing", dependencies: ["AudioAppCore", "AudioAppRealtime", "AudioAppMacros"]),
         .target(name: "AudioAppDSP", dependencies: ["AudioAppCore", "AudioAppRealtime", "AudioAppProcessing"]),
         .target(name: "AudioAppMetering", dependencies: ["AudioAppCore", "AudioAppRealtime", "AudioAppProcessing", "AudioAppDSP"]),
         .target(name: "AudioAppRenderAhead", dependencies: ["AudioAppCore", "AudioAppRealtime", "AudioAppProcessing"]),
