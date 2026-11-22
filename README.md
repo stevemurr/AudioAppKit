@@ -48,7 +48,7 @@ new routing up at its next block, never sees a half-made change, and never frees
 | Module | Types |
 |---|---|
 | `AudioAppCore` | `SampleRate`, `FramePosition`, `Decibels`, `ChannelLayout`, `Format`, `Taper`, `AudioBlock`, `SampleBuffer`, `Transport`, `RenderContext`, `Event`, `EventList`, `EventBuffer`, `WaveformOverview`, `WaveformBuilder` |
-| `AudioAppRealtime` | `SPSCQueue`, `AudioRing`, `LatestValue`, `Swapped` and `SwappedReader`, `RealtimeMath`, `RealtimeThread` |
+| `AudioAppRealtime` | `SPSCQueue`, `AudioRing`, `LatestValue`, `TaggedSlot`, `Swapped` and `SwappedReader`, `RealtimeMath`, `RealtimeThread` |
 | `AudioAppProcessing` | `Processor`, `@ProcessorSet`, `Graph`, `GraphRenderer`, `Parameter`, `Smoothed`, `ParameterTree`, `ParameterSnapshot`, `ParameterHistory`, `ParameterAttachment`, `Chain`, `DryWet`, `Bypassable`, `MidSide`, `PerChannel`, `ScratchBuffer`, `LatencyDelay` |
 | `AudioAppDSP` | `Gain`, `Biquad`, `StateVariableFilter`, `OnePole`, `Allpass`, `DelayLine`, `EnvelopeFollower`, `Oscillator`, `NoiseSource`, `FFT`, `Window`, `SpectralFrame`, `FilterBank`, `STFTHost`, `DynamicsCore`, `Dynamics`, `LookaheadLimiter`, `FeedbackDelayNetwork`, `Resampler`, `Oversampled` |
 | `AudioAppMetering` | `PeakMeter`, `RMSMeter`, `TruePeakMeter`, `KWeighting`, `LoudnessMeter`, `SpectrumAnalyzer`, `CorrelationMeter`, `MeterTap`, `MeterReadout` |
