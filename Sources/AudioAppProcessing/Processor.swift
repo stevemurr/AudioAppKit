@@ -17,6 +17,11 @@ public protocol Processor: ~Copyable {
     /// Renders one block in place, on the audio thread.
     mutating func process(_ io: inout AudioBlock, _ context: borrowing RenderContext)
 
+    /// Renders one block in place while listening to a second signal, the side-chain: what a
+    /// compressor ducks to, what a gate opens for. A graph calls this instead of `process`
+    /// for a node that has side-chain connections. The default ignores the side-chain.
+    mutating func process(_ io: inout AudioBlock, sidechain: AudioBlock, _ context: borrowing RenderContext)
+
     /// Forgets everything heard so far: filter state, delay contents, envelopes.
     mutating func reset()
 
@@ -25,6 +30,10 @@ public protocol Processor: ~Copyable {
 }
 
 extension Processor where Self: ~Copyable {
+    @inlinable public mutating func process(_ io: inout AudioBlock, sidechain: AudioBlock, _ context: borrowing RenderContext) {
+        process(&io, context)
+    }
+
     @inlinable public mutating func reset() {}
     @inlinable public var latencyFrames: Int { 0 }
 }
@@ -48,6 +57,12 @@ public struct Chain<First: Processor & ~Copyable, Second: Processor & ~Copyable>
     @inlinable public mutating func process(_ io: inout AudioBlock, _ context: borrowing RenderContext) {
         first.process(&io, context)
         second.process(&io, context)
+    }
+
+    /// Both processors hear the side-chain.
+    @inlinable public mutating func process(_ io: inout AudioBlock, sidechain: AudioBlock, _ context: borrowing RenderContext) {
+        first.process(&io, sidechain: sidechain, context)
+        second.process(&io, sidechain: sidechain, context)
     }
 
     @inlinable public mutating func reset() {

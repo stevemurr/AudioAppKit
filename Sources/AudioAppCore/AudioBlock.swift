@@ -25,6 +25,12 @@
         UnsafeMutableBufferPointer(start: channels[channel] + offset, count: frameCount)
     }
 
+    /// A one-channel view of a single channel.
+    @_noAllocation @_noLocks
+    @inlinable public func channel(_ index: Int) -> AudioBlock {
+        AudioBlock(channels: channels + index, channelCount: 1, frameCount: frameCount, offset: offset)
+    }
+
     /// A shorter view of the same memory. The range is clamped to the block.
     @_noAllocation @_noLocks
     @inlinable public func slice(from start: Int, count: Int) -> AudioBlock {
