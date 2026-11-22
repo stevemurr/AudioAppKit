@@ -34,7 +34,12 @@ public final class AudioEngine: @unchecked Sendable {
         /// The device to play through, or nil for the system's default output.
         public var outputDevice: AudioDevice?
         #endif
-        /// How many channels to render. The engine uses fewer if the device has fewer.
+        /// The rate to render at, or nil for the device's own. When set, the system converts
+        /// what is rendered to the device's rate and channel count, so an app that works at
+        /// one fixed rate can play through any device.
+        public var sampleRate: SampleRate?
+        /// How many channels to render. Without a `sampleRate`, the engine uses fewer if the
+        /// device has fewer.
         public var outputChannels = 2
         /// How many input channels to capture, or zero for none. Capturing asks the user for
         /// microphone access.
@@ -87,11 +92,16 @@ public final class AudioEngine: @unchecked Sendable {
         #endif
         let hardware = engine.outputNode.outputFormat(forBus: 0)
         guard hardware.sampleRate > 0, hardware.channelCount > 0 else { throw AudioEngineError.noOutputDevice }
-        let channels = max(1, min(configuration.outputChannels, Int(hardware.channelCount)))
-        guard let rendering = standardFormat(sampleRate: hardware.sampleRate, channels: channels) else {
-            throw AudioEngineError.cannotStart("no format for \(channels) channels at \(hardware.sampleRate) Hz")
+        // At the device's own rate the source feeds the output directly. At a rate of the
+        // app's choosing it goes through the system's mixer, which converts rate and channels.
+        let converting = configuration.sampleRate != nil
+        let rate = configuration.sampleRate?.hertz ?? hardware.sampleRate
+        let channels = converting ? max(1, configuration.outputChannels)
+                                  : max(1, min(configuration.outputChannels, Int(hardware.channelCount)))
+        guard let rendering = standardFormat(sampleRate: rate, channels: channels) else {
+            throw AudioEngineError.cannotStart("no format for \(channels) channels at \(rate) Hz")
         }
-        let format = Format(sampleRate: SampleRate(hardware.sampleRate), layout: .discrete(channels))
+        let format = Format(sampleRate: SampleRate(rate), layout: .discrete(channels))
         let core = EngineCore(format: format, maxFrames: configuration.maxFrames, inputChannels: configuration.inputChannels,
                               monitor: loadMonitor, render: render)
 
@@ -100,7 +110,7 @@ public final class AudioEngine: @unchecked Sendable {
             return noErr
         }
         engine.attach(source)
-        engine.connect(source, to: engine.outputNode, format: rendering)
+        engine.connect(source, to: converting ? engine.mainMixerNode : engine.outputNode, format: rendering)
 
         if configuration.inputChannels > 0 {
             let inputFormat = engine.inputNode.outputFormat(forBus: 0)

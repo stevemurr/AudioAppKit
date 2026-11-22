@@ -431,5 +431,28 @@ private let integerCases: [IntegerCase] = [
         usleep(50_000)
         #expect(frames.load(ordering: .relaxed) == after)
     }
+
+    @Test func theEngineRendersAtARateTheAppChooses() throws {
+        // Silent, as above. A rate no common device runs at, so the system must convert.
+        guard DeviceList.defaultOutput != nil else { return }
+        var configuration = AudioEngine.Configuration()
+        configuration.sampleRate = 32_000
+        let engine = AudioEngine(configuration)
+        let frames = Atomic<Int>(0)
+        let began = Date()
+        do {
+            try engine.start { _, output, context in
+                if context.sampleRate.hertz == 32_000, output.channelCount == 2 {
+                    frames.wrappingAdd(output.frameCount, ordering: .relaxed)
+                }
+            }
+        } catch { return }
+        #expect(engine.format == Format(sampleRate: 32_000, layout: .stereo))
+        usleep(500_000)
+        engine.stop()
+        // About 32,000 frames a second were asked for, not the device's own rate.
+        let perSecond = Double(frames.load(ordering: .relaxed)) / Date().timeIntervalSince(began)
+        #expect(perSecond > 16_000 && perSecond < 40_000, "\(perSecond)")
+    }
     #endif
 }
