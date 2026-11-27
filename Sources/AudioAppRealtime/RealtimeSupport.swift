@@ -18,6 +18,12 @@ public enum RealtimeMath {
 
     @inlinable @inline(never) @_semantics("no_performance_analysis")
     public static func pow(_ base: Double, _ exponent: Double) -> Double { Darwin.pow(base, exponent) }
+
+    @inlinable @inline(never) @_semantics("no_performance_analysis")
+    public static func log10(_ x: Double) -> Double { Darwin.log10(x) }
+
+    @inlinable @inline(never) @_semantics("no_performance_analysis")
+    public static func log10(_ x: Float) -> Float { Darwin.log10f(x) }
 }
 
 /// Settings for a thread that renders audio.

@@ -52,7 +52,7 @@ new routing up at its next block, never sees a half-made change, and never frees
 | `AudioAppProcessing` | `Processor`, `@ProcessorSet`, `Graph`, `GraphRenderer`, `Parameter`, `Smoothed`, `ParameterTree`, `ParameterSnapshot`, `ParameterHistory`, `ParameterAttachment`, `Chain`, `DryWet`, `Bypassable`, `MidSide`, `PerChannel`, `ScratchBuffer`, `LatencyDelay` |
 | `AudioAppDSP` | `Gain`, `Biquad`, `BiquadCoefficients`, `BiquadState`, `StateVariableFilter`, `OnePole`, `Allpass`, `DelayLine`, `EnvelopeFollower`, `ThirdHarmonic`, `Oscillator`, `NoiseSource`, `FFT`, `Window`, `SpectralFrame`, `FilterBank`, `STFTHost`, `BandCurveLayout`, `BandCurveDesign`, `BandCurveFilter`, `DynamicsCore`, `Dynamics`, `LookaheadLimiter`, `FeedbackDelayNetwork`, `Resampler`, `Oversampled` |
 | `AudioAppMetering` | `PeakMeter`, `RMSMeter`, `TruePeakMeter`, `KWeighting`, `LoudnessMeter`, `SpectrumAnalyzer`, `CorrelationMeter`, `MeterTap`, `MeterReadout` |
-| `AudioAppMixer` | `StereoFeed`, `SendDelays`, `ReturnLevel` |
+| `AudioAppMixer` | `StereoFeed`, `SendDelays`, `ReturnLevel`, `ReturnFollower`, `ReturnFollowerPlan` |
 | `AudioAppRenderAhead` | `AheadProducer`, `AheadLane`, `AheadReader`, `AheadSource`, `AheadDiagnostics` |
 | `AudioAppIO` | `AudioDevice`, `DeviceList`, `AudioEngine`, `LoadMonitor`, `AudioFileReader`, `AudioFileWriter`, `StreamingFileSource`, `OfflineRenderer`, `SampleRateConverter` |
 | `AudioAppControls` | `Fader`, `Knob`, `LineSlider`, `LevelMeter`, `GainReductionMeter`, `SpectrumView`, `WaveformView`, `ParameterBinding`, `ControlStyle` |
@@ -102,7 +102,7 @@ These come from what the compiler accepted and rejected while building the libra
    `Parameter` gets a reference count on every read, which the compiler rejects.
 2. **Reserve all memory in `prepare`.** Free it in `deinit`.
 3. **Mark `process` with `@_noAllocation @_noLocks`,** and make it `@inlinable` if it lives in a library.
-4. **Use `RealtimeMath` for `sqrt`, `tan` and `pow`.** `exp`, `log`, `sin` and `cos` pass the check as
+4. **Use `RealtimeMath` for `sqrt`, `tan`, `pow` and `log10`.** `exp`, `log`, `sin` and `cos` pass the check as
    they are; the others call the system math library, which the check cannot see into.
 5. **Read parameters once per block,** not per sample.
 
