@@ -18,16 +18,19 @@ import Darwin
     }
 
     public var mode: Mode
-    public var thresholdDB: Float
+    public var thresholdDB: Double
     /// How many decibels of level change give one decibel at the output, 1 or more.
-    public var ratio: Float
+    public var ratio: Double
     /// The width in decibels, centred on the threshold, over which the ratio eases in.
-    public var kneeDB: Float
-    @usableFromInline var attack: Float = 1
-    @usableFromInline var release: Float = 1
-    @usableFromInline var currentDB: Float = 0
+    public var kneeDB: Double
 
-    @inlinable public init(mode: Mode = .compressor, thresholdDB: Float = -18, ratio: Float = 4, kneeDB: Float = 6) {
+    // Kept in double precision: a release of seconds moves the gain by less each sample than single precision
+    // can add up, and a render can then be matched against an offline reference sample for sample.
+    @usableFromInline var attack = 1.0
+    @usableFromInline var release = 1.0
+    @usableFromInline var currentDB = 0.0
+
+    @inlinable public init(mode: Mode = .compressor, thresholdDB: Double = -18, ratio: Double = 4, kneeDB: Double = 6) {
         self.mode = mode
         self.thresholdDB = thresholdDB
         self.ratio = ratio
@@ -37,15 +40,15 @@ import Darwin
     /// Sets how fast gain is taken away and given back: the time to cover 63% of a change.
     @_noAllocation @_noLocks
     @inlinable public mutating func setTimes(attack: Double, release: Double, sampleRate: SampleRate) {
-        self.attack = attack > 0 ? Float(1 - exp(-1 / (attack * sampleRate.hertz))) : 1
-        self.release = release > 0 ? Float(1 - exp(-1 / (release * sampleRate.hertz))) : 1
+        self.attack = attack > 0 ? 1 - exp(-1 / (attack * sampleRate.hertz)) : 1
+        self.release = release > 0 ? 1 - exp(-1 / (release * sampleRate.hertz)) : 1
     }
 
     /// The gain in decibels, zero or below, that a steady level would settle at.
     @_noAllocation @_noLocks
-    @inlinable public func settledGainDB(levelDB: Float) -> Float {
-        let slope: Float
-        let past: Float
+    @inlinable public func settledGain(atDB levelDB: Double) -> Double {
+        let slope: Double
+        let past: Double
         switch mode {
         case .compressor:
             slope = 1 / max(ratio, 1) - 1
@@ -60,13 +63,25 @@ import Darwin
         return slope * past
     }
 
+    /// As `settledGain(atDB:)`, in single precision.
+    @_noAllocation @_noLocks
+    @inlinable public func settledGainDB(levelDB: Float) -> Float { Float(settledGain(atDB: Double(levelDB))) }
+
+    /// Takes the signal's level in decibels and returns the gain to apply now, in decibels, zero or below. For a
+    /// detector that already works in decibels, and for the full precision the gain is kept in. Call once per
+    /// sample, or once per block with times set to match.
+    @_noAllocation @_noLocks
+    @inlinable public mutating func gainDB(levelDB: Double) -> Double {
+        let target = settledGain(atDB: levelDB)
+        currentDB += (target < currentDB ? attack : release) * (target - currentDB)
+        return currentDB
+    }
+
     /// Takes the signal's level as a linear amplitude and returns the gain to apply now, in
     /// decibels. Call once per sample, or once per block with times set to match.
     @_noAllocation @_noLocks
     @inlinable public mutating func gainDB(level: Float) -> Float {
-        let target = settledGainDB(levelDB: 20 * log10(max(level, 1e-10)))
-        currentDB += (target < currentDB ? attack : release) * (target - currentDB)
-        return currentDB
+        Float(gainDB(levelDB: Double(20 * log10(max(level, 1e-10)))))
     }
 
     /// As `gainDB(level:)`, as a linear gain.
@@ -76,10 +91,42 @@ import Darwin
     }
 
     /// The gain being applied now, in decibels: zero or below.
-    @inlinable public var reductionDB: Float { currentDB }
+    @inlinable public var reductionDB: Float { Float(currentDB) }
+
+    /// The gain being applied now, in decibels and in full precision. Set it to carry on from a known state.
+    @inlinable public var heldGainDB: Double {
+        get { currentDB }
+        set { currentDB = min(newValue, 0) }
+    }
 
     @_noAllocation @_noLocks
     @inlinable public mutating func reset() { currentDB = 0 }
+}
+
+/// A third harmonic: the thickening of a transformer or a tape stage, as the simplest curve that makes one.
+///
+/// The signal is measured against a reference level; `amount` of its cube is taken away. A tone at the reference
+/// comes out with a third harmonic a quarter of `amount` as strong as itself, and quieter signals with less, as
+/// the square of their level. Past `clip` times the reference the curve stops bending, so nothing folds over.
+/// It has no memory: drive `amount` from a gain reduction and the colour deepens as a compressor works harder.
+@frozen public struct ThirdHarmonic: Sendable, BitwiseCopyable {
+    /// The level the colour is measured against, as a linear amplitude.
+    public var reference: Double
+    /// How far past the reference the curve keeps bending, as a multiple of it.
+    public var clip: Double
+
+    @inlinable public init(reference: Double = 1, clip: Double = 4) {
+        self.reference = max(reference, 1e-12)
+        self.clip = clip
+    }
+
+    /// One sample through the curve.
+    @_noAllocation @_noLocks
+    @inlinable @inline(__always) public func process(_ x: Double, amount: Double) -> Double {
+        let v = x / reference
+        let bent = min(max(v, -clip), clip)
+        return (v - amount * bent * bent * bent) * reference
+    }
 }
 
 /// A plain compressor or expander: `DynamicsCore` with a detector, channels linked so the
@@ -125,9 +172,9 @@ public struct Dynamics: Processor, ~Copyable {
 
     @_noAllocation @_noLocks
     @inlinable public mutating func process(_ io: inout AudioBlock, _ context: borrowing RenderContext) {
-        core.thresholdDB = threshold.value
-        core.ratio = ratio.value
-        core.kneeDB = knee.value
+        core.thresholdDB = Double(threshold.value)
+        core.ratio = Double(ratio.value)
+        core.kneeDB = Double(knee.value)
         let wanted = (attack: attack.value, release: release.value)
         if wanted != times {
             core.setTimes(attack: Double(wanted.attack), release: Double(wanted.release), sampleRate: sampleRate)
