@@ -15,6 +15,7 @@ import AudioAppRealtime
 @frozen public struct BiquadCoefficients: Hashable, Sendable {
     public var b0, b1, b2, a1, a2: Double
 
+    @_noAllocation @_noLocks
     @inlinable public init(b0: Double, b1: Double, b2: Double, a1: Double, a2: Double) {
         self.b0 = b0
         self.b1 = b1
@@ -33,10 +34,18 @@ import AudioAppRealtime
     ///   - q: sharpness. 0.7071 gives the flattest low-pass and high-pass.
     @inlinable public static func design(_ response: FilterResponse, frequency: Double, gain: Double = 0,
                                          q: Double = 0.7071, sampleRate: SampleRate) -> BiquadCoefficients {
+        design(response, frequency: frequency, amplitude: exp(gain * 0.057_564_627_324_851_14), q: max(q, 0.01), sampleRate: sampleRate)  // 10^(gain/40)
+    }
+
+    /// The same design with the lift or cut given as the cookbook's `A`, the square root of the linear gain, for a
+    /// caller that works it out its own way.
+    /// - Parameter q: used as it is given: keep it above nothing.
+    @_noAllocation @_noLocks
+    @inlinable public static func design(_ response: FilterResponse, frequency: Double, amplitude a: Double, q: Double,
+                                         sampleRate: SampleRate) -> BiquadCoefficients {
         let w = 2 * Double.pi * min(max(frequency, 1), 0.49 * sampleRate.hertz) / sampleRate.hertz
         let cosine = cos(w)
-        let alpha = sin(w) / (2 * max(q, 0.01))
-        let a = exp(gain * 0.057_564_627_324_851_14)        // 10^(gain/40)
+        let alpha = sin(w) / (2 * q)
         var b0 = 1.0, b1 = 0.0, b2 = 0.0, a0 = 1.0, a1 = 0.0, a2 = 0.0
         switch response {
         case .lowPass:
@@ -65,6 +74,15 @@ import AudioAppRealtime
             a2 = (a + 1) - (a - 1) * cosine - s
         }
         return BiquadCoefficients(b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0)
+    }
+
+    /// What the filter does to a steady tone, in decibels, at a frequency given as the cosine and sine of its angle
+    /// and of twice its angle: for many sections at the same frequencies, whose angles are worked out once.
+    @_noAllocation @_noLocks
+    @inlinable public func magnitudeDB(cosine c1: Double, sine s1: Double, cosine2 c2: Double, sine2 s2: Double) -> Double {
+        let nr = b0 + b1 * c1 + b2 * c2, ni = b1 * s1 + b2 * s2
+        let dr = 1 + a1 * c1 + a2 * c2, di = a1 * s1 + a2 * s2
+        return 10 * RealtimeMath.log10(max((nr * nr + ni * ni) / max(dr * dr + di * di, 1e-300), 1e-24))
     }
 
     /// What the filter does to a steady tone at a frequency, in decibels. For drawing curves
@@ -114,6 +132,7 @@ extension BiquadCoefficients {
     public var z1 = 0.0
     public var z2 = 0.0
 
+    @_noAllocation @_noLocks
     @inlinable public init() {}
 
     /// Takes one sample and returns the filtered one.
