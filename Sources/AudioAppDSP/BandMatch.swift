@@ -1,3 +1,4 @@
+import AudioAppRealtime
 import Darwin
 
 /// An equaliser driven by a reference: the curve of band gains that moves a signal's spectrum toward a reference
@@ -92,5 +93,69 @@ public struct BandMatch: Equatable, Sendable {
             for (offset, weight) in kernel.enumerated() { sum += weight * x[min(max(index + offset - radius, 0), x.count - 1)] }
             return sum
         }
+    }
+}
+
+extension BandMatch {
+    /// The working space `curve(power:reference:bands:into:scratch:)` needs, in values.
+    @inlinable public func scratchCount(bands: Int) -> Int { 3 * bands + 2 * Self.radius(smooth) + 1 }
+
+    /// How many bands each side the smoothing reaches.
+    @inlinable static func radius(_ sigma: Double) -> Int { sigma > 0 ? Int(4 * sigma + 0.5) : 0 }
+
+    /// The curve that moves a signal toward a reference, as `curve(power:reference:)` makes it and to the same
+    /// arithmetic, over memory the caller supplies: for the audio thread.
+    /// - Parameters:
+    ///   - power: the signal's power in each of `bands` bands.
+    ///   - reference: the shape wanted of it; nil asks for nothing.
+    ///   - gains: room for `bands` gains in decibels, the level hold in them.
+    ///   - scratch: `scratchCount(bands:)` values.
+    /// - Returns: the one gain the level hold put in every band, in decibels; 0 without it.
+    @_noAllocation @_noLocks
+    @inlinable public func curve(power: UnsafePointer<Double>, reference: UnsafePointer<Double>?, bands: Int, into gains: UnsafeMutablePointer<Double>,
+                                 scratch: UnsafeMutablePointer<Double>) -> Double {
+        guard bands > 0 else { return 0 }
+        let share = scratch, gap = scratch + bands, kernel = scratch + 3 * bands
+        var total = 0.0
+        for band in 0..<bands { total += power[band] }
+        var top = -Double.infinity
+        for band in 0..<bands {
+            share[band] = power[band] / max(total, 1e-300)
+            // The shape, kept in `gains` for now.
+            gains[band] = 10 * RealtimeMath.log10(max(share[band], 1e-12))
+            top = band == 0 ? gains[band] : max(top, gains[band])
+        }
+        var mean = 0.0
+        for band in 0..<bands {
+            let wanted = reference.map { $0[band] - gains[band] } ?? 0
+            let present = min(max((gains[band] - top + absentDB) / fadeDB, 0), 1)
+            gap[band] = min(max(wanted, -clipDB), clipDB) * present
+            mean = mean + share[band] * gap[band]
+        }
+        for band in 0..<bands { gap[band] -= mean }
+        // Smoothed across bands, the ends held, into `gains`.
+        let radius = Self.radius(smooth)
+        if smooth > 0 {
+            var weight = 0.0
+            for offset in 0...(2 * radius) {
+                kernel[offset] = exp(-0.5 * RealtimeMath.pow(Double(offset - radius) / smooth, 2))
+                weight += kernel[offset]
+            }
+            for offset in 0...(2 * radius) { kernel[offset] /= weight }
+            for band in 0..<bands {
+                var sum = 0.0
+                for offset in 0...(2 * radius) { sum += kernel[offset] * gap[min(max(band + offset - radius, 0), bands - 1)] }
+                gains[band] = sum
+            }
+        } else {
+            for band in 0..<bands { gains[band] = gap[band] }
+        }
+        for band in 0..<bands { gains[band] = min(max(amount * gains[band], -limitDB), limitDB) }
+        guard holdsLevel else { return 0 }
+        var after = 0.0
+        for band in 0..<bands { after = after + power[band] * RealtimeMath.pow(10, gains[band] / 10) }
+        let shift = 10 * RealtimeMath.log10(max(after, 1e-30) / total)
+        for band in 0..<bands { gains[band] -= shift }
+        return -shift
     }
 }
