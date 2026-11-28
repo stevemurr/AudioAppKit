@@ -334,7 +334,7 @@ public struct BandListener: ~Copyable {
     /// The match toward a reference shape (`BandMatch`), made from the listener's running spectrum.
     /// - Parameters:
     ///   - reference: the shape wanted, a level-free value per band of the curve in decibels.
-    ///   - scratch: `match.scratchCount(bands:)` values of working space.
+    ///   - scratch: working space, `ReferenceEQ.scratchCount(for:)` values.
     case match(BandMatch, reference: UnsafePointer<Double>, scratch: UnsafeMutablePointer<Double>)
 }
 
@@ -388,6 +388,8 @@ public struct ReferenceEQ: ~Copyable {
     }
 
     @inlinable public var bandCount: Int { filter.bandCount }
+    /// The working space a match source needs, in values: the match's own, and two rows of the curve's bands.
+    @inlinable public func scratchCount(for match: BandMatch) -> Int { match.scratchCount(bands: filter.bandCount) + 2 * filter.bandCount }
     /// How many samples it can pass before the hop ends and the next curve is due.
     @inlinable public var room: Int { @_noAllocation @_noLocks get { filter.room } }
 

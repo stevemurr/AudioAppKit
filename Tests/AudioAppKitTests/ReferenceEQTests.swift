@@ -210,8 +210,8 @@ import Testing
         let signal = TestSignal.noise(frames: 16 * hop, amplitude: 0.3, seed: 38)
         let dark = BandMatch.shape((0..<16).map { pow(10, -Double($0) / 5) })
         let match = BandMatch(amount: 1, limitDB: 6, smooth: 1, holdsLevel: true)
-        var scratch = [Double](repeating: 0, count: match.scratchCount(bands: 16))
         let eq = ReferenceEQ(listener: makeListener(), filter: makeFilter())
+        var scratch = [Double](repeating: 0, count: eq.scratchCount(for: match))
         _ = dark.withUnsafeBufferPointer { d in scratch.withUnsafeMutableBufferPointer { s in run(eq, signal, source: .match(match, reference: d.baseAddress!, scratch: s.baseAddress!)) } }
         #expect(eq.curve[15] < -3 && eq.curve[0] > 0)
     }
@@ -254,7 +254,7 @@ import Testing
         var left = TestSignal.noise(frames: 8 * hop, amplitude: 0.3, seed: 42), right = left
         let given = [Float](repeating: 2, count: 16)
         let reference = BandMatch.shape([Double](repeating: 1, count: 16))
-        var scratch = [Double](repeating: 0, count: match.scratchCount(bands: 16))
+        var scratch = [Double](repeating: 0, count: eq.scratchCount(for: match))
         let frames = left.count
         let report = left.withUnsafeMutableBufferPointer { l in
             right.withUnsafeMutableBufferPointer { r in
